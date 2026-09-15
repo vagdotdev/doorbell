@@ -9,8 +9,12 @@ final class HallwayStore: ObservableObject {
     @Published private(set) var requests: [Profile] = []
     @Published private(set) var outgoing: Set<String> = []
 
+    var beforeSignOut: (() async -> Void)?
+    @Published private(set) var isSigningOut = false
+    @Published var problem: String?
     private let backend: any DoorbellBackend
     private var listener: Task<Void, Never>?
+    private var refreshVersion = 0
 
     init(backend: any DoorbellBackend) {
         self.backend = backend
@@ -23,17 +27,25 @@ final class HallwayStore: ObservableObject {
     }
 
     func refresh() async {
+        guard !isSigningOut else { return }
+        refreshVersion += 1
+        let version = refreshVersion
         let next = await backend.accountState()
-        if next != account { NSLog("account: \(account) → \(next)") }
-        account = next
-        guard account == .ready, let snap = try? await backend.hallway() else {
+        guard version == refreshVersion, !isSigningOut else { return }
+        guard next == .ready else {
+            account = next
             me = nil; doors = []; requests = []; outgoing = []
             return
         }
-        me = snap.me
-        doors = snap.doors
-        requests = snap.requests
-        outgoing = snap.outgoing
+        do {
+            let snap = try await backend.hallway()
+            guard version == refreshVersion, !isSigningOut else { return }
+            account = .ready
+            me = snap.me; doors = snap.doors; requests = snap.requests; outgoing = snap.outgoing
+        } catch {
+            guard version == refreshVersion, !isSigningOut else { return }
+            account = .unavailable
+        }
     }
 
     // MARK: Account
@@ -54,7 +66,15 @@ final class HallwayStore: ObservableObject {
     }
 
     func signOut() {
-        Task { await backend.signOut(); await refresh() }
+        guard !isSigningOut else { return }
+        isSigningOut = true
+        refreshVersion += 1
+        Task {
+            await beforeSignOut?()
+            await backend.signOut()
+            isSigningOut = false
+            await refresh()
+        }
     }
 
     // MARK: Graph
@@ -72,6 +92,7 @@ final class HallwayStore: ObservableObject {
     func request(_ profile: Profile) { perform { try await $0.request(profile.id) } }
     func accept(_ profile: Profile) { perform { try await $0.accept(profile.id) } }
     func ignore(_ profile: Profile) { perform { try await $0.ignore(profile.id) } }
+    func removeFollower(_ profile: Profile) { perform { try await $0.removeFollower(profile.id) } }
     func unfollow(_ profile: Profile) { perform { try await $0.unfollow(profile.id) } }
     func setCloseFriend(_ profile: Profile, _ on: Bool) {
         perform { try await $0.setCloseFriend(profile.id, on) }
@@ -79,7 +100,8 @@ final class HallwayStore: ObservableObject {
 
     private func perform(_ op: @escaping @Sendable (any DoorbellBackend) async throws -> Void) {
         Task {
-            try? await op(backend)
+            do { try await op(backend); problem = nil }
+            catch { problem = "Couldn’t save that. Try again." }
             await refresh()
         }
     }

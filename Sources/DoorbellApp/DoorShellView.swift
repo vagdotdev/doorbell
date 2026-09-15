@@ -5,6 +5,7 @@ struct DoorShellView: View {
     let geometry: NotchGeometry
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var controller: DoorController
+    @EnvironmentObject private var hallway: HallwayStore
 
     private var size: CGSize { geometry.size(for: state.kind) }
     private var frameSize: CGSize { geometry.frameSize(for: state.kind) }
@@ -42,6 +43,17 @@ struct DoorShellView: View {
         // Hover is tracked by the panel (see NotchPanel.trackMouse), not here: SwiftUI's
         // onHover only reports reliably while the app is active, and this app never is.
         .onExitCommand { state.unpin() }
+        .task(id: state.kind) {
+            guard state.kind == .board else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                await hallway.refresh()
+            }
+        }
+        .alert("Doorbell", isPresented: Binding(get: { controller.problem != nil || hallway.problem != nil }, set: { if !$0 { controller.problem = nil; hallway.problem = nil } })) {
+            Button("OK") { controller.problem = nil; hallway.problem = nil }
+        } message: { Text(controller.problem ?? hallway.problem ?? "") }
     }
 
     private var boardContent: some View {

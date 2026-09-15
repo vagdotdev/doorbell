@@ -15,6 +15,7 @@ enum PeepholeStyle: String, CaseIterable, Identifiable {
 
 /// UserDefaults keys. All local; none of this leaves the machine.
 enum SettingsKey {
+    static let quiet = "quietDoor"
     static let peepholeStyle = "peepholeStyle"
     static let soundsEnabled = "soundsEnabled"
     static let micModeNudged = "micModeNudged"

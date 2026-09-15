@@ -9,9 +9,15 @@ struct RoomView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                TileGrid(participants: room.participants)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 44)   // room for the traffic lights
+                if let share = room.media.localScreen ?? room.media.peers.compactMap(\.screen).first {
+                    LiveVideo(track: share, fit: true)
+                        .padding(.horizontal, 16).padding(.top, 44)
+                    TileGrid(participants: room.participants).frame(height: 120).padding(.horizontal, 16)
+                } else {
+                    TileGrid(participants: room.participants)
+                        .padding(.horizontal, 16).padding(.top, 44)
+                }
+                MediaStatus(media: room.media, room: room)   // room for the traffic lights
                 ControlBar()
                     .padding(.vertical, 14)
             }
@@ -40,6 +46,8 @@ struct RoomView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.chatOpen)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.peopleOpen)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: door.visitor)
+        .sheet(isPresented: $room.sharePickerOpen) { SharePicker(media: room.media) }
+        .sheet(isPresented: $room.devicesOpen) { DevicePicker(media: room.media) }
         .frame(minWidth: 640, minHeight: 420)
     }
 }
@@ -56,8 +64,8 @@ private struct AtTheDoor: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(DesignTokens.ink)
                 .lineLimit(1)
-            PillButton(title: "Not Now") { door.dismissPeephole() }
-            PillButton(title: "Let In", prominent: true) { door.openDoor() }
+            PillButton(title: "Not Now") { door.dismissPeephole() }.disabled(door.isAdmitting)
+            PillButton(title: door.isAdmitting ? "Opening…" : "Let In", prominent: true) { door.openDoor() }.disabled(door.isAdmitting)
         }
         .padding(.leading, 8)
         .padding(.trailing, 6)
@@ -183,21 +191,25 @@ private struct ParticipantTile: View {
 
 private struct ControlBar: View {
     @EnvironmentObject private var room: RoomSession
+    @EnvironmentObject private var door: DoorController
 
     var body: some View {
         HStack(spacing: 10) {
-            RoomControl(symbol: room.micOn ? "mic.fill" : "mic.slash.fill",
-                        tint: room.micOn ? .neutral : .off) { room.micOn.toggle() }
-            RoomControl(symbol: room.camOn ? "video.fill" : "video.slash.fill",
-                        tint: room.camOn ? .neutral : .off) { room.camOn.toggle() }
-            RoomControl(symbol: "rectangle.on.rectangle",
-                        tint: room.sharing ? .active : .neutral) { room.sharing.toggle() }
-            RoomControl(symbol: "person.2.fill",
+            RoomControl(label: room.micOn ? "Mute microphone" : "Turn on microphone", symbol: room.micOn ? "mic.fill" : "mic.slash.fill",
+                        tint: room.micOn ? .neutral : .off) { Task { await room.media.setMicrophone(!room.micOn) } }
+                .disabled(!room.media.isConnected || room.media.isUpdating)
+            RoomControl(label: room.camOn ? "Turn off camera" : "Turn on camera", symbol: room.camOn ? "video.fill" : "video.slash.fill",
+                        tint: room.camOn ? .neutral : .off) { Task { await room.media.setCamera(!room.camOn) } }
+                .disabled(!room.media.isConnected || room.media.isUpdating)
+            RoomControl(label: room.sharing ? "Stop sharing" : "Share a screen or window", symbol: "rectangle.on.rectangle",
+                        tint: room.sharing ? .active : .neutral) { if room.sharing { Task { await room.media.stopScreenShare() } } else { room.sharePickerOpen = true } }
+            RoomControl(label: "Camera and audio devices", symbol: "slider.horizontal.3", tint: .neutral) { room.devicesOpen = true }
+            RoomControl(label: "People", symbol: "person.2.fill",
                         tint: room.peopleOpen ? .active : .neutral) { room.togglePeople() }
-            RoomControl(symbol: "bubble.left.fill",
+            RoomControl(label: "Chat", symbol: "bubble.left.fill",
                         tint: room.chatOpen ? .active : .neutral, badge: room.unread) { room.toggleChat() }
-            RoomControl(symbol: "phone.down.fill", tint: .leave, wide: true) {
-                NSApp.keyWindow?.close()
+            RoomControl(label: "Leave room", symbol: "phone.down.fill", tint: .leave, wide: true) {
+                door.closeRoom()
             }
         }
     }
@@ -206,6 +218,7 @@ private struct ControlBar: View {
 private struct RoomControl: View {
     enum Tint { case neutral, off, active, leave }
 
+    let label: String
     let symbol: String
     let tint: Tint
     var badge = 0
@@ -241,6 +254,8 @@ private struct RoomControl: View {
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .help(label)
         .onHover { hovering = $0 }
     }
 }
@@ -370,7 +385,7 @@ private struct ChatDrawer: View {
     }
 
     private func send() {
-        room.send(draft)
-        draft = ""
+        let text = draft
+        Task { if await room.send(text), draft == text { draft = "" } }
     }
 }

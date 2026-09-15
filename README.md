@@ -77,8 +77,32 @@ See `docs/plan.md`. Short version:
 0. ✅ Shell — real notch geometry, hover unfurl
 1. ✅ Hallway on a mock backend — doors, search, requests, close friends, settings
 2. ✅ Knock + peephole (both glass styles), visiting, walk-in → room, simulated locally
-3. 🔨 Real media — LiveKit seats, real tracks in peephole and room (screen share, device pickers pending)
+3. 🔨 Real media — LiveKit seats, real tracks in peephole and room (screen/window picker, devices and error states implemented; two-Mac proof pending)
 4. 🔨 Real backend — Supabase auth, follow graph, token function, realtime knocks; end to end on the local stack
 5. Utilities — scratch, Now Playing, mail slot, shouts
 6. Do not disturb — Focus + meeting detection, pinhole mode
 7. Ship — design pass, sound, signing, updates, battery
+
+## Reliability checks
+
+```sh
+scripts/check.sh
+```
+
+Requires Swift, Node, Docker with the local Supabase database running, and `livekit-server`.
+Database tests create and drop an isolated test database. Media tests start and stop their own
+loopback server on ports 17900–17902. No cloud data is changed. Hardware capture is a separate check.
+
+## Share a private beta
+
+Put your cloud Supabase URL and public anon/publishable key in `.env`, with
+`DOORBELL_BACKEND=supabase`. Deploy both migrations and the v2 token function first.
+Then run `scripts/package-beta.sh` to create `build/Doorbell-beta.zip` and its SHA-256 checksum.
+The package contains the app and **Install Doorbell.command**, which copies it into
+`~/Applications` and removes quarantine only from that copy.
+
+This is an ad-hoc signed private beta. macOS may still ask your friend to approve the installer.
+Camera, microphone, and screen recording permission remain required. A cloud-ready release
+package and a fresh-Mac install have **not** been verified yet.
+
+See [release evidence and remaining checks](docs/reliable-doors.md).

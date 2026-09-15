@@ -12,6 +12,12 @@ struct AccountView: View {
             case .signedOut: SignInForm()
             case .needsHandle: HandleForm()
             case .ready: EmptyView()
+            case .unavailable:
+                VStack(spacing: 12) {
+                    Text("Can’t load your account right now.")
+                    PillButton(title: "Try Again", prominent: true) { Task { await hallway.refresh() } }
+                }
+
             }
         }
         .padding(.horizontal, 22)

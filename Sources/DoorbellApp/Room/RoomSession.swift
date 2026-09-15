@@ -9,15 +9,12 @@ final class RoomSession: ObservableObject {
     @Published private(set) var host = ""
     @Published private(set) var isActive = false
     @Published private(set) var participants: [RoomParticipant] = []
-    @Published var micOn = true {
-        didSet { let on = micOn; setLocal { $0.micOn = on }; sync { await $0.setMicrophone(on) } }
-    }
-    @Published var camOn = true {
-        didSet { let on = camOn; setLocal { $0.camOn = on }; sync { await $0.setCamera(on) } }
-    }
-    @Published var sharing = false {
-        didSet { let on = sharing; sync { await $0.setScreenShare(on) } }
-    }
+    var micOn: Bool { media.micOn }
+    var camOn: Bool { media.camOn }
+    var sharing: Bool { media.sharing }
+    @Published var sharePickerOpen = false
+    @Published var devicesOpen = false
+    @Published var problem: String?
     @Published var chatOpen = false
     @Published var peopleOpen = false
     @Published private(set) var chat: [ChatMessage] = []
@@ -25,9 +22,10 @@ final class RoomSession: ObservableObject {
 
     private(set) var me: Profile?
     let media: MediaSession
-    /// Called when the window closes, after media is down.
+    /// Synchronously invalidates pending work when the window closes.
     var onLeave: (() -> Void)?
 
+    private var sessionID = UUID()
     private var others: [Profile] = []
     private var mediaSink: AnyCancellable?
 
@@ -35,23 +33,23 @@ final class RoomSession: ObservableObject {
         self.media = media
         mediaSink = media.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in Task { @MainActor in self?.rebuild() } }
+            .sink { [weak self] _ in Task { @MainActor in self?.objectWillChange.send(); self?.rebuild() } }
         media.onData = { [weak self] data, topic, from in
-            guard topic == "chat", let self, let text = String(data: data, encoding: .utf8) else { return }
+            guard topic == "chat", data.count <= 4_000, let self, self.isActive, let text = String(data: data, encoding: .utf8) else { return }
             let sender = self.participants.first { $0.id == from }?.profile
                 ?? Profile(id: from ?? "?", handle: from ?? "?", displayName: from ?? "Someone", avatarURL: nil)
             self.chat.append(ChatMessage(from: sender, text: text))
+            if self.chat.count > 200 { self.chat.removeFirst(self.chat.count - 200) }
             if !self.chatOpen { self.unread += 1 }
         }
     }
 
     func start(host: String, me: Profile, others: [Profile]) {
+        sessionID = UUID()
         self.host = host
         self.me = me
         self.others = others
-        micOn = true
-        camOn = true
-        sharing = false
+        problem = nil
         chat = []
         unread = 0
         peopleOpen = false
@@ -68,21 +66,44 @@ final class RoomSession: ObservableObject {
     }
 
     func leave() {
-        isActive = false
-        participants = []
-        chatOpen = false
-        Task {
-            await media.disconnect()
-            onLeave?()
-        }
+        reset()
+        onLeave?()
     }
 
-    func send(_ text: String) {
-        guard let me else { return }
+    func reset() {
+        sessionID = UUID()
+        isActive = false
+        participants = []
+        others = []
+        chat = []
+        unread = 0
+        chatOpen = false
+        peopleOpen = false
+        sharePickerOpen = false
+        devicesOpen = false
+        me = nil
+        host = ""
+    }
+
+    func send(_ text: String) async -> Bool {
+        guard let me else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        chat.append(ChatMessage(from: me, text: trimmed))
-        Task { await media.send(Data(trimmed.utf8), topic: "chat") }
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 4_000 else {
+            problem = "Keep messages under 4 KB."
+            return false
+        }
+        let ticket = sessionID
+        do {
+            if AppConfig.current.useSupabase { try await media.send(Data(trimmed.utf8), topic: "chat") }
+            guard isActive, ticket == sessionID else { return false }
+            chat.append(ChatMessage(from: me, text: trimmed))
+            if chat.count > 200 { chat.removeFirst(chat.count - 200) }
+            problem = nil
+            return true
+        } catch {
+            problem = "Message wasn’t sent. Your text is still here."
+            return false
+        }
     }
 
     // One side panel at a time.
@@ -114,19 +135,10 @@ final class RoomSession: ObservableObject {
                     via: peer.via.flatMap { ($0 == me.handle || $0 == peer.id || known != nil) ? nil : $0 },
                     video: peer.video)
             }
-        } else {
+        } else if !AppConfig.current.useSupabase {
             list += others.map { RoomParticipant(id: $0.id, profile: $0, isLocal: false, isHost: $0.handle == host) }
         }
         if list != participants { participants = list }
     }
 
-    private func setLocal(_ change: (inout RoomParticipant) -> Void) {
-        guard let i = participants.firstIndex(where: \.isLocal) else { return }
-        change(&participants[i])
-    }
-
-    private func sync(_ op: @escaping (MediaSession) async -> Void) {
-        guard media.isConnected else { return }
-        Task { await op(media) }
-    }
 }

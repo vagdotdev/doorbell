@@ -4,6 +4,8 @@ Goal: a notch app two to five friends use instead of Meet. Each phase ends in so
 
 Legend: ✅ done · 🔨 in progress · ⬜ not started
 
+Current reliability status and release gates: [reliable-doors.md](reliable-doors.md). Earlier checks below describe their original phase, not proof of the current cloud release.
+
 ## Phase 0 — Shell ✅
 
 Black shell hugging the real notch. Hover unfurls it on a spring; window resizes so menu-bar clicks work when closed.
@@ -45,7 +47,7 @@ Swap the mock's fake video for LiveKit. Tokens come from `door-token`; nothing i
 - ✅ `client-sdk-swift` via SPM. `MediaSession` wraps `Room`: connect, publish mic/cam, remote tracks, speaking, data messages, per-track volume driven by `IncomingAudio` (door volume → full).
 - ✅ Two seats per person: `media` (the room I'm in) and `peep` (my hidden seat behind my own door while someone knocks — no mic, no camera, invisible to the knocker).
 - ✅ Real tracks in the peephole, the visiting glass, and the room tiles. The mock's `CameraPreview` steps aside when LiveKit owns the camera.
-- ⬜ Room window still to finish on real tracks: device pickers, screen share, connection quality, active-speaker ring.
+- ✅ Device pickers, screen/window selection, connection/error states, active-speaker ring implemented. Actual capture and device switching still need two-Mac verification; per-person connection quality remains planned.
 
 Check: two accounts on one Mac (`DOORBELL_PROFILE=alice` / `bob`) against the local stack: knock → hidden peek → open → both publish mic + camera in `door:bob` — passes. Still to do: 10 minutes on two Macs with screen share and chat.
 
@@ -57,7 +59,7 @@ Replace the mock with the network.
 
 - ✅ Migration `20260915000000_graph.sql`: `profiles`, `follows`, `close_friends`, triggers, RLS, `search_profiles` RPC, private door channels on `realtime.messages`. Only the door's owner may read their channel; nobody but the server writes to it.
 - ✅ Edge Function `door-token`: mints seats (`visit` / `answer` / `admit` / `leave`) and rings the door itself with the service role after checking the graph. Clients never broadcast — a follower policy on `realtime.messages` would have let followers *read* the channel too.
-- ✅ `SupabaseBackend` implements `DoorbellBackend`: email + password auth, per-profile session file, hallway from `follows` with embedded profiles, search RPC, one private channel per door. Mock stays for development (`DOORBELL_BACKEND` unset).
+- ✅ `SupabaseBackend` implements `DoorbellBackend`: email + password auth, per-profile Keychain session, hallway from `follows` with embedded profiles, search RPC, one private channel per door. Mock stays for development (`DOORBELL_BACKEND` unset).
 - ✅ Onboarding in the shell: sign in → pick handle → hallway. Sign out from Settings.
 - ⬜ Sign in with Apple. ⬜ A cloud project (the first one was removed; everything runs locally for now — see README).
 
@@ -69,7 +71,7 @@ Scratch shelf (drag in / park / drag out, local). Now Playing (verify the curren
 
 Check: app is useful with zero friends for a day.
 
-## Phase 6 — Do not disturb ⬜
+## Phase 6 — Do not disturb 🔨 manual Quiet Door implemented
 
 Focus detection, camera/mic-in-use detection, pinhole mode. Nothing published.
 

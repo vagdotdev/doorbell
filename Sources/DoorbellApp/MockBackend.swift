@@ -99,11 +99,11 @@ actor MockBackend: DoorbellBackend {
 
     // The mock has no second user, so it treats close friendship as mutual:
     // if they're on my list, pretend I'm on theirs.
-    func visit(_ id: Profile.ID) async throws -> Visit {
+    func visit(_ id: Profile.ID, visitID: UUID) async throws -> Visit {
         Visit(mode: graph.closeFriends.contains(id) ? .walkIn : .knock, grant: nil)
     }
 
-    func leaveVisit(_ id: Profile.ID) async {}
+    func leaveVisit(_ id: Profile.ID, visitID: UUID) async {}
 
     func simulate(_ event: DoorEvent) async {
         eventsContinuation.yield(event)

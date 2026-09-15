@@ -25,6 +25,7 @@ let package = Package(
                 .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT",
                               "-Xlinker", "__info_plist", "-Xlinker", "Sources/DoorbellApp/Info.plist"])
             ]
-        )
+        ),
+        .testTarget(name: "DoorbellTests", dependencies: ["DoorbellApp"], path: "Tests/DoorbellTests")
     ]
 )

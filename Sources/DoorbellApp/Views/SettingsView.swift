@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var hallway: HallwayStore
+    @EnvironmentObject private var door: DoorController
     @AppStorage(SettingsKey.peepholeStyle) private var peephole: PeepholeStyle = .eyehole
     @AppStorage(SettingsKey.soundsEnabled) private var sounds = true
     @StateObject private var mic = MicrophoneMode()
@@ -11,6 +12,11 @@ struct SettingsView: View {
             SubHeader("Settings")
 
             VStack(spacing: 0) {
+                SettingRow(title: "Quiet door") {
+                    Toggle("Quiet door", isOn: $door.quiet).labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                        .help("No automatic walk-ins or door audio. You choose when to answer.")
+                }
+                Divider().overlay(DesignTokens.hairline)
                 SettingRow(title: "Glass") {
                     SegmentedPills(options: PeepholeStyle.allCases, selection: $peephole) { $0.label }
                 }
@@ -44,7 +50,7 @@ struct SettingsView: View {
                 }
                 Spacer()
                 if AppConfig.current.useSupabase {
-                    Button("Sign Out") { hallway.signOut() }
+                    Button("Sign Out") { hallway.signOut() }.disabled(hallway.isSigningOut)
                         .buttonStyle(.plain)
                         .foregroundStyle(DesignTokens.inkSecondary)
                 }

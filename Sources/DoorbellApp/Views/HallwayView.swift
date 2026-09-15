@@ -66,13 +66,16 @@ private struct DoorCard: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .contextMenu {
-            Toggle("Close Friend", isOn: Binding(
+            Toggle("Allow Walk-ins", isOn: Binding(
                 get: { door.isCloseFriend },
                 set: { hallway.setCloseFriend(door.profile, $0) }
             ))
             .disabled(!door.followsMe)
             if !door.followsMe {
                 Text("Available when they follow you")
+            }
+            if door.followsMe {
+                Button("Remove Follower", role: .destructive) { hallway.removeFollower(door.profile) }
             }
             Divider()
             Button("Unfollow @\(door.profile.handle)", role: .destructive) {

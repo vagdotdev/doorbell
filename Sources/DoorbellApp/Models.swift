@@ -33,11 +33,11 @@ struct HallwaySnapshot: Sendable {
 
 /// What happened at my door.
 enum DoorEvent: Sendable, Equatable {
-    case knock(Profile)
-    case walkIn(Profile)
-    case visitorLeft(Profile)
+    case knock(Profile, visitID: UUID = UUID())
+    case walkIn(Profile, visitID: UUID = UUID())
+    case visitorLeft(Profile, visitID: UUID)
     /// The door I knocked on opened: who let me in, and my seat in their room.
-    case admitted(Profile, MediaGrant)
+    case admitted(Profile, MediaGrant, visitID: UUID)
 }
 
 /// What the token function decided when I clicked a door.
@@ -63,6 +63,7 @@ struct Visit: Sendable {
 /// Where the account stands. The mock is always `ready`.
 enum AccountState: Sendable, Equatable {
     case signedOut
+    case unavailable
     /// Signed in, but no profile row yet: pick a handle.
     case needsHandle
     case ready
