@@ -32,7 +32,15 @@ final class MediaSession: ObservableObject {
     /// A reliable data message on a topic, with the sender's identity.
     var onData: ((Data, String, String?) -> Void)?
 
-    private let room = Room()
+    // Every seat's microphone is cleaned the same way — the knocker on the doorstep as
+    // much as anyone in the room. Apple's voice processing where the platform has it,
+    // WebRTC's otherwise; the high-pass takes fan and room rumble off the bottom.
+    // See docs/audio.md for what this does and doesn't cover.
+    private let room = Room(roomOptions: RoomOptions(
+        defaultAudioCaptureOptions: AudioCaptureOptions(
+            echoCancellation: true, autoGainControl: true, noiseSuppression: true, highpassFilter: true
+        )
+    ))
     private var gainSink: AnyCancellable?
     /// One Room, one thing at a time. A seat trade (doorstep → room) can arrive while
     /// the first seat's camera is still coming up; the SDK does not like a disconnect

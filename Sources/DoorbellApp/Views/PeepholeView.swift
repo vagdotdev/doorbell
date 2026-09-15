@@ -41,8 +41,8 @@ struct PeepholeView: View {
                              active: door.listening) {
                     withAnimation(DesignTokens.spring) { door.toggleListening() }
                 }
-                // In a room already: they join it. Otherwise the door opens onto mine.
-                RoundControl(symbol: "door.left.hand.open", label: door.room.isActive ? "Let In" : "Open",
+                // In a room already: they join it. Otherwise they come into yours.
+                RoundControl(symbol: "door.left.hand.open", label: door.room.isActive ? "Let In" : "Accept",
                              tint: DesignTokens.openDoor) { door.openDoor() }
             }
         }
