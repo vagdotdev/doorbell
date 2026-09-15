@@ -36,6 +36,7 @@ actor SupabaseBackend: DoorbellBackend {
     func accountState() async -> AccountState {
         guard (try? await client.auth.session) != nil else { return .signedOut }
         if me == nil { me = try? await fetchMe() }
+        if me != nil { await listenAtMyDoor() }
         return me == nil ? .needsHandle : .ready
     }
 
@@ -69,8 +70,10 @@ actor SupabaseBackend: DoorbellBackend {
         for await (event, session) in client.auth.authStateChanges {
             switch event {
             case .initialSession, .signedIn:
-                if session != nil, me == nil, let p = try? await fetchMe() {
-                    me = p
+                // `accountState()` may have fetched the profile first; either way, the
+                // door listens as soon as there is a session and a handle.
+                if session != nil {
+                    if me == nil, let p = try? await fetchMe() { me = p }
                     await listenAtMyDoor()
                     updatesOut.yield()
                 }
@@ -175,8 +178,8 @@ actor SupabaseBackend: DoorbellBackend {
         let seat = try await token(door: door, intent: "visit")
         // The function rang the door for us; only it may write to that channel.
         let mode: VisitMode = seat.mode == "walk_in" ? .walkIn : .knock
-        guard let url = seat.url, let jwt = seat.token else { throw BackendError.noSuchDoor }
-        return Visit(mode: mode, grant: MediaGrant(url: url, token: jwt))
+        guard let grant = seat.grant else { throw BackendError.noSuchDoor }
+        return Visit(mode: mode, grant: grant)
     }
 
     func leaveVisit(_ id: Profile.ID) async {
@@ -189,13 +192,17 @@ actor SupabaseBackend: DoorbellBackend {
         return try await token(door: me.handle, intent: "answer", hidden: hidden).grant
     }
 
-    func knockAnswered(_ id: Profile.ID) async throws -> MediaGrant? {
-        try await token(door: try await handle(for: id), intent: "knock_answered").grant
+    func admit(_ id: Profile.ID, into room: String?) async throws {
+        guard let me else { throw BackendError.noProfile }
+        _ = try await token(door: me.handle, intent: "admit", guest: try await handle(for: id), room: room)
     }
 
-    private func token(door: String, intent: String, hidden: Bool? = nil) async throws -> Seat {
+    private func token(door: String, intent: String, hidden: Bool? = nil,
+                       guest: String? = nil, room: String? = nil) async throws -> Seat {
         var body: [String: AnyJSON] = ["door": .string(door), "intent": .string(intent)]
         if let hidden { body["hidden"] = .bool(hidden) }
+        if let guest { body["guest"] = .string(guest) }
+        if let room { body["room"] = .string(room) }
         return try await client.functions.invoke("door-token", options: .init(body: body))
     }
 
@@ -216,11 +223,13 @@ actor SupabaseBackend: DoorbellBackend {
         let knocks = channel.broadcastStream(event: "knock")
         let walkIns = channel.broadcastStream(event: "walk_in")
         let lefts = channel.broadcastStream(event: "left")
+        let admits = channel.broadcastStream(event: "admitted")
         doorListener = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { for await m in knocks { await self?.arrived(m, .knock) } }
                 group.addTask { for await m in walkIns { await self?.arrived(m, .walkIn) } }
                 group.addTask { for await m in lefts { await self?.arrived(m, .left) } }
+                group.addTask { for await m in admits { await self?.arrived(m, .admitted) } }
             }
         }
         await channel.subscribe()
@@ -233,10 +242,10 @@ actor SupabaseBackend: DoorbellBackend {
         door = nil
     }
 
-    private enum Arrival { case knock, walkIn, left }
+    private enum Arrival { case knock, walkIn, left, admitted }
 
     private func arrived(_ message: JSONObject, _ kind: Arrival) async {
-        // The stream hands over the whole envelope: { type, event, payload: { from } }.
+        // The stream hands over the whole envelope: { type, event, payload: { from, … } }.
         guard case .object(let payload)? = message["payload"],
               case .string(let from)? = payload["from"] else { return }
         guard let who = await profile(handle: from) else { return }
@@ -245,6 +254,11 @@ actor SupabaseBackend: DoorbellBackend {
         case .knock: eventsOut.yield(.knock(who))
         case .walkIn: eventsOut.yield(.walkIn(who))
         case .left: eventsOut.yield(.visitorLeft(who))
+        case .admitted:
+            // My seat rides along: this channel is private to me, written only by the server.
+            guard case .string(let url)? = payload["url"], case .string(let token)? = payload["token"],
+                  case .string(let room)? = payload["room"] else { return }
+            eventsOut.yield(.admitted(who, MediaGrant(url: url, token: token, room: room)))
         }
     }
 
@@ -293,11 +307,12 @@ private struct MemberRow: Decodable {
 private struct Seat: Decodable {
     let token: String?
     let url: String?
+    let room: String?
     let mode: String
 
     var grant: MediaGrant? {
-        guard let token, let url else { return nil }
-        return MediaGrant(url: url, token: token)
+        guard let token, let url, let room else { return nil }
+        return MediaGrant(url: url, token: token, room: room)
     }
 }
 

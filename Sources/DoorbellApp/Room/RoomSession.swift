@@ -56,6 +56,14 @@ final class RoomSession: ObservableObject {
         rebuild()
     }
 
+    /// Someone was let in while the room is running: know their face and name before
+    /// their tracks arrive (and stand in for them entirely on the mock).
+    func include(_ profile: Profile) {
+        guard !others.contains(profile) else { return }
+        others.append(profile)
+        rebuild()
+    }
+
     func leave() {
         isActive = false
         participants = []

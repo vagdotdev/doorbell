@@ -56,7 +56,7 @@ Learned: launched from an agent's sandboxed shell, the camera silently never del
 Replace the mock with the network.
 
 - ✅ Migration `20260915000000_graph.sql`: `profiles`, `follows`, `close_friends`, triggers, RLS, `search_profiles` RPC, private door channels on `realtime.messages`. Only the door's owner may read their channel; nobody but the server writes to it.
-- ✅ Edge Function `door-token`: mints seats (`visit` / `answer` / `knock_answered` / `leave`) and rings the door itself with the service role after checking the graph. Clients never broadcast — a follower policy on `realtime.messages` would have let followers *read* the channel too.
+- ✅ Edge Function `door-token`: mints seats (`visit` / `answer` / `admit` / `leave`) and rings the door itself with the service role after checking the graph. Clients never broadcast — a follower policy on `realtime.messages` would have let followers *read* the channel too.
 - ✅ `SupabaseBackend` implements `DoorbellBackend`: email + password auth, per-profile session file, hallway from `follows` with embedded profiles, search RPC, one private channel per door. Mock stays for development (`DOORBELL_BACKEND` unset).
 - ✅ Onboarding in the shell: sign in → pick handle → hallway. Sign out from Settings.
 - ⬜ Sign in with Apple. ⬜ A cloud project (the first one was removed; everything runs locally for now — see README).

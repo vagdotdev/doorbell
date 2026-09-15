@@ -50,7 +50,7 @@ cp supabase/.env.local.example supabase/.env.local
 supabase functions serve door-token --env-file supabase/.env.local   # keep it running
 
 cp .env.example .env                           # then paste ANON_KEY from `supabase status -o env`
-scripts/seed-local.sh                          # alice + bob, following each other
+scripts/seed-local.sh                          # alice + bob (mutual follow), carol (bob is on her close list)
 scripts/bundle.sh debug                        # → build/Doorbell.app (a bundle keeps camera/mic permission)
 open build/Doorbell.app
 ```

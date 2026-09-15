@@ -55,27 +55,33 @@ The visitor's app asks for a `visit` token and is told which one it got. The own
 
 ## Rooms
 
-Every user owns exactly one LiveKit room, named after their handle: `door:vagdev`. LiveKit creates it on first join and destroys it when empty. Nobody is connected while idle.
+Every user owns two LiveKit rooms, named after their handle. `door:vagdev` is the room. `doorstep:vagdev` is the step outside it: a knocker waits there, and the owner peeks from there. Keeping the step separate means a knocker is never visible to whoever is already inside the room. LiveKit creates rooms on first join and destroys them when empty. Nobody is connected while idle.
 
 Every join needs a token. Tokens are JWTs signed with the LiveKit API secret, which lives only in a Supabase Edge Function. The Mac app calls the function; the function checks the graph and returns a token — or refuses.
 
 ```
 POST /functions/v1/door-token
-  { door: "vagdev", intent: "visit" | "knock_answered" | "answer", hidden?: bool }
-  → { token, url, mode: "knock" | "walk_in" | "answer" }
+  { door: "vagdev", intent: "visit" | "answer" | "admit" | "leave", hidden?, guest?, room? }
+  → { token, url, room, mode: "knock" | "walk_in" | "answer" }
 
-visit          → close_friends(door, caller) exists
-                   mode=walk_in, grant: roomJoin, canPublish, canSubscribe
-                 else follows(caller → door).status = accepted
-                   mode=knock,   grant: roomJoin, canPublish, canSubscribe=false
-                 else 403
-knock_answered → requires accepted follow AND the owner is a *visible* participant in
-                 the room right now (LiveKit's participant list omits hidden ones, so
-                 "owner is listed" ⇔ "owner opened the door")
-                 grant: roomJoin, canPublish, canSubscribe
-answer         → requires caller = door (you, answering your own door)
-                 grant: roomJoin, canPublish, canSubscribe, hidden = body.hidden ?? true
+visit   → close_friends(door, caller) exists
+            mode=walk_in, room=door:vagdev, grant: roomJoin, canPublish, canSubscribe
+          else follows(caller → door).status = accepted
+            mode=knock,   room=doorstep:vagdev, grant: roomJoin, canPublish, canSubscribe=false
+          else 403
+answer  → requires caller = door (you, at your own door)
+            hidden (default): room=doorstep:vagdev, grant: … canSubscribe, hidden   — the peephole
+            hidden=false:     room=door:vagdev,     grant: … canSubscribe            — hosting
+admit   → requires caller = door, and follows(guest → door) accepted
+          room = body.room ?? door:vagdev. Another room (one you're a guest in) is
+          allowed only if you are a visible participant of it right now.
+          Mints the guest's full seat in that room and broadcasts it to the guest's
+          own channel as `admitted`. Returns { mode: "admitted" } — the caller never
+          sees the guest's token.
+leave   → broadcasts `left` on the door
 ```
+
+Nobody enters a room without the owner's `admit`. There is no way for a knocker to upgrade their own seat.
 
 Source: `supabase/functions/door-token/index.ts`. Schema and RLS: `supabase/migrations/`.
 
@@ -90,8 +96,10 @@ Each running app holds one Supabase Realtime channel for its own door, `door:{ha
 Messages:
 
 ```
-knock    { from: "arjun" }
-walk_in  { from: "arjun" }
+knock     { from: "arjun" }
+walk_in   { from: "arjun" }
+left      { from: "arjun" }
+admitted  { from: "vagdev", room, url, token }   ← to the knocker's own channel
 ```
 
 That is the whole protocol. No acks. No delivery status. If the owner's app is not running, the message is dropped. From the knocker's side that is indistinguishable from being ignored, which is exactly the rule.
@@ -100,16 +108,21 @@ That is the whole protocol. No acks. No delivery status. If the owner's app is n
 
 Arjun clicks Vagdev's door. Arjun is an accepted follower, not a close friend.
 
-1. Arjun's app → Edge Function: `{ door: "vagdev", intent: "knock" }`. Returns a publish-only token.
-2. Arjun's app connects to `door:vagdev` on LiveKit, publishes camera + mic. His local preview shows him at the door. He can start talking.
-3. Arjun's app broadcasts `knock { from: "arjun" }` on the Realtime channel `door:vagdev`.
-4. Vagdev's app receives it. Notch bounces once, knock sound plays (unless DND — see below).
-5. Vagdev's app → Edge Function: `{ door: "vagdev", intent: "answer" }`. Returns a **hidden** token.
-6. Vagdev's app joins the same LiveKit room as a hidden participant, subscribes to Arjun's tracks, and renders his face in the peephole (rectangle or eye-hole, per Vagdev's setting). Arjun's audio plays at **door volume** — about a quarter — so it reads as "someone's outside talking". A *listen* toggle brings it to full. Arjun's client cannot see that anyone joined; his token has `canSubscribe=false`, so even if Vagdev published by accident Arjun would receive nothing.
-7. One of two things happens:
-   - **Open door.** Vagdev clicks the green button. His app re-requests an `answer` token with `hidden=false`, reconnects visibly, publishes mic + camera, and opens the room window. Arjun's app sees a participant appear and re-requests its own token with intent `knock_answered`, which grants `canSubscribe`. Arjun now sees and hears Vagdev. They are in the room. Nothing about Arjun's follow or close-friend status changes.
+1. Arjun's app → Edge Function: `{ door: "vagdev", intent: "visit" }`. Returns a publish-only token for `doorstep:vagdev`, and the function broadcasts `knock { from: "arjun" }` on Vagdev's channel.
+2. Arjun's app connects to the doorstep, publishes camera + mic. His local preview shows him at the door. He can start talking.
+3. Vagdev's app receives the knock. Notch bounces once, knock sound plays (unless DND — see below).
+4. Vagdev's app → Edge Function: `{ door: "vagdev", intent: "answer" }`. Returns a **hidden** token for the doorstep.
+5. Vagdev's app joins the doorstep as a hidden participant, subscribes to Arjun's tracks, and renders his face in the peephole (rectangle or eye-hole, per Vagdev's setting). Arjun's audio plays at **door volume** — about a quarter — so it reads as "someone's outside talking". A *listen* toggle brings it to full. Arjun's client cannot see that anyone joined; his token has `canSubscribe=false`, so even if Vagdev published by accident Arjun would receive nothing.
+6. One of two things happens:
+   - **Open.** Vagdev clicks the green button. His app takes a visible `answer` seat in `door:vagdev`, publishes mic + camera, opens the room window, then calls `admit { guest: "arjun" }`. The function mints Arjun's full seat and delivers it on Arjun's own channel as `admitted`. Arjun's app trades the doorstep for the room. They are in the room. Nothing about Arjun's follow or close-friend status changes.
    - **Nothing.** The peephole stays while Arjun is at the door and retracts a moment after he leaves. Vagdev can also dismiss it early. Vagdev's app disconnects from LiveKit. Nothing is written anywhere.
-8. Arjun's side: the porch light stays on for up to 30 s or until he closes it. Then his app disconnects. He learned one thing: let in, or not.
+7. Arjun's side: the porch light stays on for up to 30 s or until he closes it. Then his app disconnects. He learned one thing: let in, or not.
+
+### Knock while a room is already going
+
+Vagdev is mid-conversation — in his own room, or a guest in Priya's — and Arjun knocks. Same peephole in the notch; the same choice appears as a small bar inside the room window too, the way Meet asks "someone wants to join". The green button reads **Let In**. The doorstep seat stays silent (the room keeps its level) until Vagdev chooses *listen*.
+
+Let In calls `admit { guest: "arjun", room: <the room Vagdev is in> }`. For a room that isn't Vagdev's, the function first checks that Vagdev is a visible participant of it — he can vouch someone into a room only from inside it. Arjun's seat lands in that room, captioned "Arjun · friend of Vagdev" to whoever doesn't know him. Someone new walked in and said hello; nobody exchanged a link.
 
 No `knocks` table exists. Knocks are never logged, counted, or shown later.
 

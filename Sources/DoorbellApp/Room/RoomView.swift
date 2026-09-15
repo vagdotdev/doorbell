@@ -3,6 +3,7 @@ import SwiftUI
 /// Black, clean, quiet. Tiles, a strip of controls, a chat drawer.
 struct RoomView: View {
     @EnvironmentObject private var room: RoomSession
+    @EnvironmentObject private var door: DoorController
 
     var body: some View {
         HStack(spacing: 0) {
@@ -29,8 +30,41 @@ struct RoomView: View {
                 .padding(.leading, 82)
                 .padding(.top, 12)
         }
+        .overlay(alignment: .topTrailing) {
+            // Someone knocked while we're talking. Same choice as the notch, here too.
+            if let visitor = door.visitor {
+                AtTheDoor(visitor: visitor)
+                    .padding(.top, 8)
+                    .padding(.trailing, 16)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.chatOpen)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: door.visitor)
         .frame(minWidth: 640, minHeight: 420)
+    }
+}
+
+/// A knock, seen from inside the room: who, and let them in or not.
+private struct AtTheDoor: View {
+    let visitor: Profile
+    @EnvironmentObject private var door: DoorController
+
+    var body: some View {
+        HStack(spacing: 10) {
+            AvatarView(profile: visitor, size: 24)
+            Text("\(visitor.displayName) is at the door")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(DesignTokens.ink)
+                .lineLimit(1)
+            PillButton(title: "Not Now") { door.dismissPeephole() }
+            PillButton(title: "Let In", prominent: true) { door.openDoor() }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 6)
+        .frame(height: 38)
+        .background(Capsule().fill(.black.opacity(0.7)))
+        .overlay(Capsule().strokeBorder(DesignTokens.hairline, lineWidth: 1))
     }
 }
 

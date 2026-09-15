@@ -30,10 +30,12 @@ protocol DoorbellBackend: Sendable {
     func visit(_ id: Profile.ID) async throws -> Visit
     /// Step away from their door.
     func leaveVisit(_ id: Profile.ID) async
-    /// A seat in my own room. `hidden` is the peephole: I see them, they don't see me.
+    /// `hidden`: a seat on my doorstep — I see and hear the knocker, they don't see me.
+    /// Otherwise a seat in my own room, as its host.
     func answer(hidden: Bool) async throws -> MediaGrant?
-    /// The door I knocked on opened. Trade the knocker's seat for a full one.
-    func knockAnswered(_ id: Profile.ID) async throws -> MediaGrant?
+    /// Let a knocker in. `room` is where I am right now — my own room, or one I'm a
+    /// guest in — and is where their seat will be. They hear about it on their door.
+    func admit(_ id: Profile.ID, into room: String?) async throws
 
     /// Development only: pretend something happened at my door.
     func simulate(_ event: DoorEvent) async
@@ -46,6 +48,6 @@ extension DoorbellBackend {
     func claimHandle(_ handle: String, displayName: String) async throws {}
     func signOut() async {}
     func answer(hidden: Bool) async throws -> MediaGrant? { nil }
-    func knockAnswered(_ id: Profile.ID) async throws -> MediaGrant? { nil }
+    func admit(_ id: Profile.ID, into room: String?) async throws {}
     func simulate(_ event: DoorEvent) async {}
 }

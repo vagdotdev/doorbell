@@ -1,7 +1,9 @@
 #!/bin/zsh
-# Two accounts on the local Supabase stack, following each other (accepted):
-#   alice@test.local / password123   @alice
-#   bob@test.local   / password123   @bob
+# Three accounts on the local Supabase stack:
+#   alice@test.local / password123   @alice   follows bob (accepted, both ways)
+#   bob@test.local   / password123   @bob     follows carol (accepted); on carol's close list
+#   carol@test.local / password123   @carol   does not know alice
+# Enough to walk bob into carol's room, knock as alice, and have bob let her in there.
 # Safe to rerun; signs in instead of signing up when the account exists.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,11 +38,16 @@ follow() { # from-token from-uid to-token to-uid
 
 read ATOK AUID <<< "$(account alice@test.local password123 alice 'Alice Rao')"
 read BTOK BUID <<< "$(account bob@test.local password123 bob 'Bob Menon')"
+read CTOK CUID <<< "$(account carol@test.local password123 carol 'Carol Iyer')"
 follow "$ATOK" "$AUID" "$BTOK" "$BUID"
 follow "$BTOK" "$BUID" "$ATOK" "$AUID"
+follow "$BTOK" "$BUID" "$CTOK" "$CUID"
+curl -s -o /dev/null -X POST "$API/rest/v1/close_friends" $H -H "Authorization: Bearer $CTOK" \
+  -d "{\"owner_id\":\"$CUID\",\"member_id\":\"$BUID\"}"
 
 echo "alice=$AUID"
 echo "bob=$BUID"
+echo "carol=$CUID"
 echo "door-token: alice visits bob →" \
   "$(curl -s -X POST "$API/functions/v1/door-token" $H -H "Authorization: Bearer $ATOK" \
        -d '{"door":"bob","intent":"visit"}' | json '{k: v for k, v in d.items() if k != "token"}')"

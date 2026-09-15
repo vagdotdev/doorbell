@@ -6,7 +6,7 @@ import SwiftUI
 final class RoomWindowController: NSWindowController, NSWindowDelegate {
     private let session: RoomSession
 
-    init(session: RoomSession) {
+    init(session: RoomSession, door: DoorController) {
         self.session = session
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 620),
@@ -24,6 +24,7 @@ final class RoomWindowController: NSWindowController, NSWindowDelegate {
         let host = NSHostingView(
             rootView: RoomView()
                 .environmentObject(session)
+                .environmentObject(door)
                 .environment(\.colorScheme, .dark)
         )
         window.contentView = host.fillingContainer()

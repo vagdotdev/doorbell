@@ -36,6 +36,8 @@ enum DoorEvent: Sendable, Equatable {
     case knock(Profile)
     case walkIn(Profile)
     case visitorLeft(Profile)
+    /// The door I knocked on opened: who let me in, and my seat in their room.
+    case admitted(Profile, MediaGrant)
 }
 
 /// What the token function decided when I clicked a door.
@@ -47,6 +49,9 @@ enum VisitMode: Sendable {
 struct MediaGrant: Sendable, Equatable {
     let url: String
     let token: String
+    /// The LiveKit room. `door:<handle>` is that person's room; `doorstep:<handle>`
+    /// is the step outside it, where a knocker waits and the owner peeks.
+    let room: String
 }
 
 /// The verdict when I click a door. The mock has no media, so `grant` is nil there.

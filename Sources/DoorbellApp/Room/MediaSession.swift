@@ -25,14 +25,19 @@ final class MediaSession: ObservableObject {
     @Published private(set) var peers: [Peer] = []
     @Published private(set) var localVideo: VideoTrack?
     @Published private(set) var isConnected = false
+    /// This seat's share of `IncomingAudio.gain`. 0 keeps a doorstep silent while a
+    /// room is already talking.
+    var volumeScale: Double = 1 { didSet { applyVolume(Double(IncomingAudio.shared.gain)) } }
 
-    /// A visible participant appeared. For the knocker this is the door opening.
-    var onPeerJoined: ((Peer) -> Void)?
     /// A reliable data message on a topic, with the sender's identity.
     var onData: ((Data, String, String?) -> Void)?
 
     private let room = Room()
     private var gainSink: AnyCancellable?
+    /// One Room, one thing at a time. A seat trade (doorstep → room) can arrive while
+    /// the first seat's camera is still coming up; the SDK does not like a disconnect
+    /// landing in the middle of that, so connects and disconnects queue.
+    private var inflight: Task<Void, Error>?
 
     init() {
         room.add(delegate: self)
@@ -42,31 +47,44 @@ final class MediaSession: ObservableObject {
     }
 
     func connect(_ grant: MediaGrant, microphone: Bool, camera: Bool) async throws {
-        do {
-            try await room.connect(url: grant.url, token: grant.token)
-        } catch {
-            NSLog("media: connect failed: \(error)")
-            throw error
+        let previous = inflight
+        let task = Task { [self] in
+            _ = try? await previous?.value
+            if room.connectionState != .disconnected { await room.disconnect() }
+            do {
+                try await room.connect(url: grant.url, token: grant.token)
+            } catch {
+                NSLog("media: connect failed: \(error)")
+                throw error
+            }
+            isConnected = true
+            // Voice first (fast); the picture follows a beat later.
+            if microphone {
+                do { try await room.localParticipant.setMicrophone(enabled: true) }
+                catch { NSLog("media: microphone: \(error)") }
+            }
+            if camera {
+                do { try await room.localParticipant.setCamera(enabled: true) }
+                catch { NSLog("media: camera: \(error)") }
+            }
+            refresh()
         }
-        isConnected = true
-        // Voice first (fast); the picture follows a beat later.
-        if microphone {
-            do { try await room.localParticipant.setMicrophone(enabled: true) }
-            catch { NSLog("media: microphone: \(error)") }
-        }
-        if camera {
-            do { try await room.localParticipant.setCamera(enabled: true) }
-            catch { NSLog("media: camera: \(error)") }
-        }
-        refresh()
+        inflight = task
+        try await task.value
     }
 
     func disconnect() async {
-        guard isConnected || room.connectionState != .disconnected else { return }
-        await room.disconnect()
-        isConnected = false
-        peers = []
-        localVideo = nil
+        let previous = inflight
+        let task = Task<Void, Error> { [self] in
+            _ = try? await previous?.value
+            guard isConnected || room.connectionState != .disconnected else { return }
+            await room.disconnect()
+            isConnected = false
+            peers = []
+            localVideo = nil
+        }
+        inflight = task
+        _ = try? await task.value
     }
 
     func setMicrophone(_ on: Bool) async {
@@ -102,7 +120,7 @@ final class MediaSession: ObservableObject {
     private func applyVolume(_ gain: Double) {
         for participant in room.remoteParticipants.values {
             for pub in participant.audioTracks {
-                (pub.track as? RemoteAudioTrack)?.volume = gain
+                (pub.track as? RemoteAudioTrack)?.volume = gain * volumeScale
             }
         }
     }
@@ -130,12 +148,7 @@ final class MediaSession: ObservableObject {
 
 extension MediaSession: RoomDelegate {
     nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
-        Task { @MainActor in
-            refresh()
-            if let peer = peers.first(where: { $0.id == participant.identity?.stringValue }) {
-                onPeerJoined?(peer)
-            }
-        }
+        Task { @MainActor in refresh() }
     }
 
     nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
