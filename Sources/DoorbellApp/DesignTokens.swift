@@ -16,7 +16,7 @@ enum DesignTokens {
     /// The door card: name, the glass as the hero, a row of round controls.
     static let doorBodyHeight: CGFloat = 296
     /// Eyehole diameter; the rectangle is 16:9 of this.
-    static let glassHeight: CGFloat = 150
+    static let glassHeight: CGFloat = 174
     static let glassRadius: CGFloat = 16
     static let controlSize: CGFloat = 40
     /// A friend's voice through the door, before you choose to listen.
@@ -27,9 +27,9 @@ enum DesignTokens {
     static let audioEnter: TimeInterval = 0.48
     static let audioDepart: TimeInterval = 0.34
 
-    // Idle pill: how far it peeks out beside and below the physical notch.
-    static let compactBleedX: CGFloat = 12
-    static let compactBleedY: CGFloat = 6
+    // At rest the shell is the notch: it does not peek out beside or below it.
+    static let compactBleedX: CGFloat = 0
+    static let compactBleedY: CGFloat = 0
     // Macs without a notch get a pill this wide under the menu bar.
     static let fallbackNotchWidth: CGFloat = 185
 
@@ -44,7 +44,7 @@ enum DesignTokens {
     /// The room is not flat black; it is a dark space with a floor.
     static let roomFloor = Color(red: 0.045, green: 0.05, blue: 0.065)
     /// How far the doorstep dome rises above the bottom of the door shell.
-    static let doorstepRise: CGFloat = 96
+    static let doorstepRise: CGFloat = 72
 
     // Type on black
     static let ink = Color.white

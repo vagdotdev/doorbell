@@ -12,6 +12,7 @@ final class NotchPanel: NSPanel {
     private let hallway: HallwayStore
     private let door: DoorController
     private var clickOutsideMonitor: Any?
+    private var hoverMonitors: [Any] = []
     private var settleTask: Task<Void, Never>?
     private var accountSink: AnyCancellable?
 
@@ -32,7 +33,7 @@ final class NotchPanel: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false   // at rest the shell is the notch; the shadow comes with the shell
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isMovableByWindowBackground = false
@@ -73,6 +74,25 @@ final class NotchPanel: NSPanel {
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor [weak self] in self?.state.unpin() }
         }
+        // Hover, from the pointer's position against the window — the one thing that
+        // reports reliably while some other app is frontmost. Global covers other apps'
+        // events, local covers our own once the panel is key.
+        let moved: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: moved, handler: { [weak self] _ in
+            Task { @MainActor [weak self] in self?.trackMouse() }
+        }) { hoverMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: moved, handler: { [weak self] event in
+            Task { @MainActor [weak self] in self?.trackMouse() }
+            return event
+        }) { hoverMonitors.append(local) }
+    }
+
+    private func trackMouse() {
+        // Against the shell's own rect, not the window's: while a spring settles the
+        // window is deliberately larger than the shell, and that slack must not count.
+        let shell = geometry.rect(for: geometry.frameSize(for: state.kind))
+        let inside = shell.contains(NSEvent.mouseLocation)
+        if state.isHovering != inside { state.isHovering = inside }
     }
 
     // Lets the search field take keyboard focus without activating the app.
@@ -124,6 +144,7 @@ final class NotchPanel: NSPanel {
         let roomy = NSRect(x: target.minX - room, y: target.minY - room,
                            width: target.width + 2 * room, height: target.height + room)
         settleTask?.cancel()
+        hasShadow = kind != .compact
         setFrame(frame.union(roomy), display: true)
         settleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: DesignTokens.springSettle)

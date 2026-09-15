@@ -13,14 +13,24 @@ struct Starfield: View {
     var body: some View {
         Canvas(opaque: false, rendersAsynchronously: true) { ctx, size in
             var rng = SplitMix(seed: seed)
-            let count = Int(size.width * size.height / 2600)
+            let count = Int(size.width * size.height / 2800)
+            var specs: [(rect: CGRect, alpha: Double, weight: Double)] = []
+            specs.reserveCapacity(max(count, 0))
             for _ in 0..<count {
                 let x = rng.unit() * size.width
                 let y = rng.unit() * size.height
-                let r = 0.4 + rng.unit() * 0.6
-                let a = (0.04 + pow(rng.unit(), 2.4) * 0.22) * intensity
-                let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
-                ctx.fill(Path(ellipseIn: rect), with: .color(.white.opacity(a)))
+                let r = 0.32 + rng.unit() * 0.42
+                let a = (0.03 + pow(rng.unit(), 2.6) * 0.14) * intensity
+                specs.append((
+                    CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2),
+                    a,
+                    r * r * a
+                ))
+            }
+            // The three loudest reads as a sky. Dust only.
+            specs.sort { $0.weight > $1.weight }
+            for spec in specs.dropFirst(3) {
+                ctx.fill(Path(ellipseIn: spec.rect), with: .color(.white.opacity(spec.alpha)))
             }
         }
         .allowsHitTesting(false)

@@ -54,9 +54,6 @@ private struct SignInForm: View {
             }
             .disabled(busy || email.isEmpty || password.count < 6)
             Spacer(minLength: 0)
-            Text("Everyone's door is private. Following is permission to knock, nothing more.")
-                .font(.system(size: 10.5))
-                .foregroundStyle(DesignTokens.inkTertiary)
         }
         .padding(.top, 10)
         .onAppear { focus = .email }

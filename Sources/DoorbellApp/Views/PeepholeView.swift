@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Someone is outside. See them, hear them a little, open the door — or don't.
+/// Someone is outside. See them, hear them a little, accept — or don't.
 struct PeepholeView: View {
     let visitor: Profile
     let geometry: NotchGeometry
@@ -41,7 +41,7 @@ struct PeepholeView: View {
                              active: door.listening) {
                     withAnimation(DesignTokens.spring) { door.toggleListening() }
                 }
-                RoundControl(symbol: "door.left.hand.open", label: "Open",
+                RoundControl(symbol: "door.left.hand.open", label: "Accept",
                              tint: DesignTokens.openDoor) { door.openDoor() }
             }
         }

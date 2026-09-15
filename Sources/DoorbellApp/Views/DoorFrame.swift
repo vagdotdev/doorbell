@@ -14,17 +14,17 @@ struct DoorFrame<Title: View, Glass: View, Controls: View>: View {
         VStack(spacing: 0) {
             Color.clear.frame(height: geometry.notchHeight)
             title
-                .padding(.top, 8)
+                .padding(.top, 6)
                 .padding(.horizontal, 24)
             glass
                 .frame(height: DesignTokens.glassHeight)
-                .padding(.top, 12)
+                .padding(.top, 6)
             controls
-                .padding(.top, 14)
+                .padding(.top, 10)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 16)
+        .padding(.bottom, 12)
         .background {
             // The notch row stays pure black; the space opens up beneath it.
             VStack(spacing: 0) {

@@ -19,12 +19,15 @@ struct DoorShellView: View {
         ZStack(alignment: .top) {
             shape.fill(.black)
             // Glass, used once: a top-lit hairline down the sides. Stroked at 2pt and
-            // clipped by the silhouette, so exactly 1pt sits inside the edge.
-            shape.stroke(
-                LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.03)],
-                               startPoint: .top, endPoint: .bottom),
-                lineWidth: 2
-            )
+            // clipped by the silhouette, so exactly 1pt sits inside the edge. Only once
+            // open — at rest the shell is the notch and nothing else.
+            if state.isExpanded {
+                shape.stroke(
+                    LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.03)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 2
+                )
+            }
             switch state.kind {
             case .compact: EmptyView()
             case .board: boardContent.transition(.shellContent)
@@ -36,7 +39,8 @@ struct DoorShellView: View {
         // The knock: a quick, heavy dip from the top edge.
         .modifier(KnockBounce(trigger: state.bounce))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onHover { state.isHovering = $0 }
+        // Hover is tracked by the panel (see NotchPanel.trackMouse), not here: SwiftUI's
+        // onHover only reports reliably while the app is active, and this app never is.
         .onExitCommand { state.unpin() }
     }
 
@@ -119,11 +123,7 @@ private struct TopRow: View {
     var body: some View {
         HStack(spacing: 0) {
             if hallway.account != .ready {
-                Text("Doorbell")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(DesignTokens.inkSecondary)
-                    .padding(.horizontal, 10)
-                Spacer()
+                Spacer()   // nothing to say up here until there is a hallway
             } else {
                 HStack(spacing: 4) {
                     TabPill(title: "Hallway", symbol: "door.left.hand.open",
