@@ -74,6 +74,8 @@ struct RoomParticipant: Identifiable, Equatable {
     let id: String
     let profile: Profile
     let isLocal: Bool
+    /// Whose door this room is behind.
+    var isHost = false
     var micOn = true
     var camOn = true
     var isSpeaking = false
@@ -83,7 +85,7 @@ struct RoomParticipant: Identifiable, Equatable {
     var video: VideoTrack?
 
     static func == (a: RoomParticipant, b: RoomParticipant) -> Bool {
-        a.id == b.id && a.profile == b.profile && a.isLocal == b.isLocal
+        a.id == b.id && a.profile == b.profile && a.isLocal == b.isLocal && a.isHost == b.isHost
             && a.micOn == b.micOn && a.camOn == b.camOn && a.isSpeaking == b.isSpeaking
             && a.via == b.via && a.video === b.video
     }

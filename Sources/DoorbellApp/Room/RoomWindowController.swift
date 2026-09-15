@@ -38,7 +38,7 @@ final class RoomWindowController: NSWindowController, NSWindowDelegate {
 
     func present() {
         guard let window else { return }
-        window.title = session.title
+        window.title = "Doorbell"   // for Mission Control and the Window menu; the titlebar itself is hidden
         if !window.isVisible { window.center() }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

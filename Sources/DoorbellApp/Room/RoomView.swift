@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Black, clean, quiet. Tiles, a strip of controls, a chat drawer.
+/// Black, clean, quiet. Tiles, a strip of controls, a drawer for people or chat.
+/// The room has no title: the people in it are the room.
 struct RoomView: View {
     @EnvironmentObject private var room: RoomSession
     @EnvironmentObject private var door: DoorController
@@ -10,26 +11,23 @@ struct RoomView: View {
             VStack(spacing: 0) {
                 TileGrid(participants: room.participants)
                     .padding(.horizontal, 16)
-                    .padding(.top, 44)   // room for the traffic lights + title
+                    .padding(.top, 44)   // room for the traffic lights
                 ControlBar()
                     .padding(.vertical, 14)
             }
             .frame(maxWidth: .infinity)
 
-            if room.chatOpen {
+            if room.peopleOpen {
+                PeopleDrawer()
+                    .frame(width: 300)
+                    .transition(.move(edge: .trailing))
+            } else if room.chatOpen {
                 ChatDrawer()
                     .frame(width: 300)
                     .transition(.move(edge: .trailing))
             }
         }
         .background(RoomBackdrop())
-        .overlay(alignment: .topLeading) {
-            Text(room.title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(DesignTokens.inkSecondary)
-                .padding(.leading, 82)
-                .padding(.top, 12)
-        }
         .overlay(alignment: .topTrailing) {
             // Someone knocked while we're talking. Same choice as the notch, here too.
             if let visitor = door.visitor {
@@ -40,6 +38,7 @@ struct RoomView: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.chatOpen)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.peopleOpen)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: door.visitor)
         .frame(minWidth: 640, minHeight: 420)
     }
@@ -193,6 +192,8 @@ private struct ControlBar: View {
                         tint: room.camOn ? .neutral : .off) { room.camOn.toggle() }
             RoomControl(symbol: "rectangle.on.rectangle",
                         tint: room.sharing ? .active : .neutral) { room.sharing.toggle() }
+            RoomControl(symbol: "person.2.fill",
+                        tint: room.peopleOpen ? .active : .neutral) { room.togglePeople() }
             RoomControl(symbol: "bubble.left.fill",
                         tint: room.chatOpen ? .active : .neutral, badge: room.unread) { room.toggleChat() }
             RoomControl(symbol: "phone.down.fill", tint: .leave, wide: true) {
@@ -241,6 +242,62 @@ private struct RoomControl: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - People
+
+/// Who's here. The host is marked; that is the only thing the room says about itself.
+private struct PeopleDrawer: View {
+    @EnvironmentObject private var room: RoomSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("People")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(DesignTokens.ink)
+                .padding(.horizontal, 16)
+                .padding(.top, 46)
+                .padding(.bottom, 12)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(room.participants) { p in
+                        HStack(spacing: 10) {
+                            AvatarView(profile: p.profile, size: 28)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(p.isLocal ? "You" : p.profile.displayName)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(DesignTokens.ink)
+                                if let via = p.via {
+                                    Text("friend of \(via)")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(DesignTokens.inkTertiary)
+                                }
+                            }
+                            Spacer()
+                            if p.isHost {
+                                Text("Host")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.inkSecondary)
+                                    .padding(.horizontal, 7)
+                                    .frame(height: 18)
+                                    .background(Capsule().fill(DesignTokens.raised))
+                            }
+                            if !p.micOn {
+                                Image(systemName: "mic.slash.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(DesignTokens.inkTertiary)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 44)
+                    }
+                }
+            }
+        }
+        .background(Color(white: 0.05))
+        .overlay(alignment: .leading) { Rectangle().fill(DesignTokens.hairline).frame(width: 1) }
     }
 }
 

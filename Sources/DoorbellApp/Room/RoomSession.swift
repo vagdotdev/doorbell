@@ -5,7 +5,8 @@ import SwiftUI
 /// real tracks; without one (the mock) they are placeholders.
 @MainActor
 final class RoomSession: ObservableObject {
-    @Published private(set) var title = ""
+    /// Handle of whoever's door this room is behind. The room has no name of its own.
+    @Published private(set) var host = ""
     @Published private(set) var isActive = false
     @Published private(set) var participants: [RoomParticipant] = []
     @Published var micOn = true {
@@ -18,6 +19,7 @@ final class RoomSession: ObservableObject {
         didSet { let on = sharing; sync { await $0.setScreenShare(on) } }
     }
     @Published var chatOpen = false
+    @Published var peopleOpen = false
     @Published private(set) var chat: [ChatMessage] = []
     @Published private(set) var unread = 0
 
@@ -43,8 +45,8 @@ final class RoomSession: ObservableObject {
         }
     }
 
-    func start(title: String, me: Profile, others: [Profile]) {
-        self.title = title
+    func start(host: String, me: Profile, others: [Profile]) {
+        self.host = host
         self.me = me
         self.others = others
         micOn = true
@@ -52,6 +54,7 @@ final class RoomSession: ObservableObject {
         sharing = false
         chat = []
         unread = 0
+        peopleOpen = false
         isActive = true
         rebuild()
     }
@@ -82,16 +85,22 @@ final class RoomSession: ObservableObject {
         Task { await media.send(Data(trimmed.utf8), topic: "chat") }
     }
 
+    // One side panel at a time.
     func toggleChat() {
         chatOpen.toggle()
-        if chatOpen { unread = 0 }
+        if chatOpen { unread = 0; peopleOpen = false }
+    }
+
+    func togglePeople() {
+        peopleOpen.toggle()
+        if peopleOpen { chatOpen = false }
     }
 
     // MARK: -
 
     private func rebuild() {
         guard isActive, let me else { return }
-        var list = [RoomParticipant(id: me.id, profile: me, isLocal: true,
+        var list = [RoomParticipant(id: me.id, profile: me, isLocal: true, isHost: me.handle == host,
                                     micOn: micOn, camOn: camOn, video: media.localVideo)]
         if media.isConnected {
             list += media.peers.map { peer in
@@ -99,13 +108,14 @@ final class RoomSession: ObservableObject {
                 return RoomParticipant(
                     id: peer.id,
                     profile: known ?? Profile(id: peer.id, handle: peer.id, displayName: peer.name, avatarURL: nil),
-                    isLocal: false, micOn: peer.micOn, camOn: peer.camOn, isSpeaking: peer.isSpeaking,
+                    isLocal: false, isHost: peer.id == host,
+                    micOn: peer.micOn, camOn: peer.camOn, isSpeaking: peer.isSpeaking,
                     // Caption strangers only: not the host, not someone I already know.
                     via: peer.via.flatMap { ($0 == me.handle || $0 == peer.id || known != nil) ? nil : $0 },
                     video: peer.video)
             }
         } else {
-            list += others.map { RoomParticipant(id: $0.id, profile: $0, isLocal: false) }
+            list += others.map { RoomParticipant(id: $0.id, profile: $0, isLocal: false, isHost: $0.handle == host) }
         }
         if list != participants { participants = list }
     }

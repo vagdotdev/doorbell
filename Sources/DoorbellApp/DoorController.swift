@@ -54,7 +54,7 @@ final class DoorController: ObservableObject {
             case .walkIn:
                 IncomingAudio.shared.arrive(muffled: false)
                 roomName = visit.grant?.room
-                openRoom(title: "\(firstName(door.profile))’s room", me: me, others: [door.profile])
+                openRoom(host: door.profile.handle, me: me, others: [door.profile])
             case .knock:
                 visiting = door
                 state.mode = .visiting(door)
@@ -97,9 +97,9 @@ final class DoorController: ObservableObject {
             try? await media.connect(grant, microphone: true, camera: true)
             roomName = grant.room
             IncomingAudio.shared.arrive(muffled: false)
-            let theirs = grant.room == "door:\(who.handle)"
-            openRoom(title: theirs ? "\(firstName(who))’s room" : "With \(firstName(who))",
-                     me: me, others: [who])
+            // `door:<handle>`: whose room I've landed in — theirs, or the one they're a guest in.
+            let host = grant.room.hasPrefix("door:") ? String(grant.room.dropFirst(5)) : who.handle
+            openRoom(host: host, me: me, others: [who])
         }
     }
 
@@ -120,7 +120,7 @@ final class DoorController: ObservableObject {
                     try? await media.connect(grant, microphone: true, camera: true)
                 }
                 IncomingAudio.shared.arrive(muffled: false)
-                openRoom(title: "Your room", me: me, others: [guest])
+                openRoom(host: me.handle, me: me, others: [guest])
                 try? await backend.admit(guest.id, into: roomName)
             }
             dismissPeephole(stopAudio: false)
@@ -187,7 +187,7 @@ final class DoorController: ObservableObject {
                     try? await media.connect(grant, microphone: true, camera: true)
                 }
                 IncomingAudio.shared.arrive(muffled: false)
-                openRoom(title: "Your room", me: me, others: [who])
+                openRoom(host: me.handle, me: me, others: [who])
             }
         case .visitorLeft(let who):
             if visitor == who { dismissPeephole() }
@@ -196,11 +196,11 @@ final class DoorController: ObservableObject {
         }
     }
 
-    private func openRoom(title: String, me: Profile, others: [Profile]) {
+    private func openRoom(host: String, me: Profile, others: [Profile]) {
         if room.isActive {
             return   // already in: they'll appear as a tile
         }
-        room.start(title: title, me: me, others: others)
+        room.start(host: host, me: me, others: others)
         roomWindow.present()
     }
 
@@ -211,10 +211,6 @@ final class DoorController: ObservableObject {
             visiting = nil
             Task { await backend.leaveVisit(door.id) }
         }
-    }
-
-    private func firstName(_ p: Profile) -> String {
-        p.displayName.split(separator: " ").first.map(String.init) ?? p.handle
     }
 
     // Development: the mock's door bell.
