@@ -87,9 +87,10 @@ struct CameraPreview: View {
 struct LiveVideo: View {
     let track: VideoTrack
     var mirrored = false
+    var fit = false
 
     var body: some View {
-        SwiftUIVideoView(track, layoutMode: .fill, mirrorMode: mirrored ? .mirror : .off)
+        SwiftUIVideoView(track, layoutMode: fit ? .fit : .fill, mirrorMode: mirrored ? .mirror : .off)
             .background(Color(white: 0.08))
     }
 }

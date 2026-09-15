@@ -1,222 +1,297 @@
+import Combine
 import SwiftUI
 
-/// The door moments: someone at my door, me at theirs, and the room that opens.
+/// A visit has one ID from click through admission. Late events cannot revive it.
 @MainActor
 final class DoorController: ObservableObject {
-    /// Who's in the peephole right now.
-    @Published private(set) var visitor: Profile?
-    /// Door volume → full volume for the current visitor.
-    @Published var listening = false
-    /// Which door I'm standing at.
+    struct Arrival: Identifiable {
+        let id: UUID
+        let profile: Profile
+        let walksIn: Bool
+    }
+    @Published private(set) var arrivals: [Arrival] = []
+    var visitor: Profile? { arrivals.first?.profile }
+    @Published private(set) var listening = false
     @Published private(set) var visiting: Door?
-
-    /// My seat in whichever room I'm in: mine, or the one I walked or was let into.
-    let media = MediaSession()
-    /// My hidden seat behind my own door while someone knocks.
-    let peep = MediaSession()
-    let room: RoomSession
-
-    private let backend: any DoorbellBackend
-    private let state: NotchState
-    private let hallway: HallwayStore
-    /// The LiveKit room my `media` seat is in — mine, or one I'm a guest in. This is
-    /// where a knocker goes when I let them in.
-    private var roomName: String?
-    private lazy var roomWindow = RoomWindowController(session: room, door: self)
-    private var eventTask: Task<Void, Never>?
-    private var visitTimeout: Task<Void, Never>?
-    private var audioArriveTask: Task<Void, Never>?
-
-    init(backend: any DoorbellBackend, state: NotchState, hallway: HallwayStore) {
-        self.backend = backend
-        self.state = state
-        self.hallway = hallway
-        room = RoomSession(media: media)
-        room.onLeave = { [weak self] in self?.roomClosed() }
-        eventTask = Task { [weak self] in
-            for await event in backend.events {
-                self?.handle(event)
+    @Published private(set) var isAdmitting = false
+    @Published var problem: String?
+    @Published var quiet: Bool {
+        didSet {
+            UserDefaults.standard.set(quiet, forKey: SettingsKey.quiet)
+            if quiet {
+                listening = false; peep.volumeScale = 0
+                if automaticAdmission, !room.isActive { admissionTask?.cancel() }
             }
         }
     }
+    let media: MediaSession
+    let peep: MediaSession
+    let room: RoomSession
+    private let backend: any DoorbellBackend
+    private let state: NotchState
+    private let hallway: HallwayStore
+    private let showsWindows: Bool
+    private let timeout: Duration
+    private(set) var roomName: String?
+    private lazy var roomWindow = RoomWindowController(session: room, door: self)
+    private var eventTask: Task<Void, Never>?
+    private var operation: Task<Void, Never>?
+    private var arrivalTask: Task<Void, Never>?
+    private var admissionTask: Task<Void, Never>?
+    private var automaticAdmission = false
+    private var visitTimeout: Task<Void, Never>?
+    private var arrivalTimeouts: [UUID: Task<Void, Never>] = [:]
+    private var outgoingID: UUID?
+    private let generation = OperationGeneration()
+    private var accountSink: AnyCancellable?
+    private var shuttingDown = false
+    private var isLeaving = false
 
-    // MARK: Me at their door
+    init(backend: any DoorbellBackend, state: NotchState, hallway: HallwayStore,
+         media: MediaSession = MediaSession(), peep: MediaSession = MediaSession(),
+         showsWindows: Bool = true, timeout: Duration = .seconds(30)) {
+        self.backend = backend; self.state = state; self.hallway = hallway
+        self.media = media; self.peep = peep; self.showsWindows = showsWindows; self.timeout = timeout
+        quiet = UserDefaults.standard.bool(forKey: SettingsKey.quiet)
+        room = RoomSession(media: media)
+        room.onLeave = { [weak self] in self?.requestLeaveRoom() }
+        hallway.beforeSignOut = { [weak self] in await self?.shutdown() }
+        accountSink = hallway.$account.dropFirst().removeDuplicates().sink { [weak self] account in
+            if account == .signedOut { Task { await self?.shutdown() } }
+        }
+        eventTask = Task { [weak self] in
+            for await event in backend.events { self?.handle(event) }
+        }
+    }
 
     func visit(_ door: Door) {
-        Task {
-            guard let me = hallway.me else { return }
-            let visit: Visit
-            do { visit = try await backend.visit(door.id) }
-            catch { NSLog("door: visit failed: \(error)"); return }
-            NSLog("door: at \(door.profile.handle)’s door (\(visit.mode))")
-            // Show the moment first; the seat (connect, camera, mic) fills in behind it.
-            switch visit.mode {
-            case .walkIn:
-                IncomingAudio.shared.arrive(muffled: false)
-                roomName = visit.grant?.room
-                openRoom(host: door.profile.handle, me: me, others: [door.profile])
-            case .knock:
-                visiting = door
-                state.mode = .visiting(door)
-                // I wait on the step. If they let me in, `.admitted` arrives at my door.
-                visitTimeout?.cancel()
-                visitTimeout = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(30))
-                    guard !Task.isCancelled else { return }
-                    self?.leaveVisit()
+        guard !shuttingDown, !isLeaving, !isAdmitting, !hallway.isSigningOut, hallway.me != nil else { return }
+        guard !room.isActive else { problem = "Leave this room before visiting another door."; return }
+        guard visiting == nil else { return }
+        let ticket = generation.advance()
+        let id = UUID()
+        outgoingID = id; visiting = door; problem = nil
+        state.mode = .visiting(door)
+        visitTimeout = Task { [weak self] in
+            try? await Task.sleep(for: self?.timeout ?? .seconds(30))
+            guard !Task.isCancelled else { return }
+            self?.leaveVisit()
+        }
+        operation = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let visit = try await backend.visit(door.id, visitID: id)
+                try generation.check(ticket)
+                if let grant = visit.grant {
+                    try await media.connect(grant, microphone: true, camera: true)
+                    try generation.check(ticket)
+                    // Signal only after the guest really occupies the isolated doorstep.
+                    try await backend.announceVisit(door.id, visitID: id)
+                    try generation.check(ticket)
+                } else if visit.mode == .walkIn { // Development hallway only.
+                    finishVisit()
+                    openRoom(host: door.profile.handle, others: [door.profile])
                 }
-            }
-            if let grant = visit.grant {
-                try? await media.connect(grant, microphone: true, camera: true)
-                // Mic is live now: the one moment macOS lets Voice Isolation be chosen.
-                if media.isConnected { MicrophoneMode.nudgeOnce() }
+            } catch {
+                guard generation.isCurrent(ticket) else { return }
+                problem = "Couldn’t reach that door. Check your connection and try again."
+                leaveVisit()
             }
         }
     }
 
     func leaveVisit() {
-        guard let door = visiting else { return }
-        NSLog("door: leaving \(door.profile.handle)")
-        visitTimeout?.cancel()
-        visiting = nil
-        if case .visiting = state.mode { state.mode = .hallway }
+        guard let door = visiting, let id = outgoingID else { return }
+        isLeaving = true
+        generation.advance(); operation?.cancel(); visitTimeout?.cancel()
+        visiting = nil; outgoingID = nil
+        state.mode = .hallway
         Task {
             await media.disconnect()
-            await backend.leaveVisit(door.id)
+            isLeaving = false
+            await backend.leaveVisit(door.id, visitID: id)
         }
     }
-
-    /// They opened. Trade the seat on the step for the one they gave me — in their
-    /// room, or in whichever room they're in, meeting whoever is there.
-    private func admitted(by who: Profile, grant: MediaGrant) {
-        guard visiting?.profile == who, let me = hallway.me else { return }
-        NSLog("door: \(who.handle) let me in → \(grant.room)")
+    private func finishVisit() {
         visitTimeout?.cancel()
-        visiting = nil
+        visiting = nil; outgoingID = nil
         if case .visiting = state.mode { state.mode = .hallway }
-        Task {
-            await media.disconnect()
-            try? await media.connect(grant, microphone: true, camera: true)
-            roomName = grant.room
-            IncomingAudio.shared.arrive(muffled: false)
-            // `door:<handle>`: whose room I've landed in — theirs, or the one they're a guest in.
-            let host = grant.room.hasPrefix("door:") ? String(grant.room.dropFirst(5)) : who.handle
-            openRoom(host: host, me: me, others: [who])
-        }
     }
-
-    // MARK: Them at my door
-
-    /// Let the knocker in. Into the room I'm already in, if there is one — the person
-    /// at the door meets whoever I'm with. Otherwise my own room opens for them.
-    func openDoor() {
-        guard let guest = visitor, let me = hallway.me else { return }
-        Task {
-            await peep.disconnect()
-            if room.isActive, let roomName {
-                room.include(guest)
-                try? await backend.admit(guest.id, into: roomName)
-            } else {
-                if let grant = try? await backend.answer(hidden: false) {
-                    roomName = grant.room
-                    try? await media.connect(grant, microphone: true, camera: true)
-                }
-                IncomingAudio.shared.arrive(muffled: false)
-                openRoom(host: me.handle, me: me, others: [guest])
-                try? await backend.admit(guest.id, into: roomName)
+    private func admitted(by who: Profile, grant: MediaGrant, visitID: UUID) {
+        guard outgoingID == visitID, visiting?.profile.id == who.id, !shuttingDown else { return }
+        let ticket = generation.advance()
+        operation?.cancel()
+        // Keep the outgoing visit cancellable until the room seat actually connects.
+        operation = Task { [weak self] in
+            guard let self else { return }
+            do {
+                await media.disconnect()
+                try generation.check(ticket)
+                try await media.connect(grant, microphone: true, camera: true)
+                try generation.check(ticket)
+                finishVisit()
+                roomName = grant.room
+                let host = grant.room.hasPrefix("door:") ? String(grant.room.dropFirst(5)) : who.handle
+                openRoom(host: host, others: [who])
+            } catch {
+                guard generation.isCurrent(ticket) else { return }
+                problem = "Couldn’t enter the room. Try knocking again."
+                leaveVisit()
             }
-            dismissPeephole(stopAudio: false)
+        }
+    }
+
+    func openDoor(automatically: Bool = false) {
+        guard let arrival = arrivals.first, hallway.me != nil, !isAdmitting, !shuttingDown, !isLeaving else { return }
+        guard visiting == nil else { problem = "Leave the doorstep before letting someone in."; return }
+        arrivalTask?.cancel()
+        guard !automatically || !quiet else { return }
+        isAdmitting = true
+        automaticAdmission = automatically
+        let ticket = generation.current
+        admissionTask = Task { [weak self] in
+            guard let self else { return }
+            var openedSeat = false
+            defer { if generation.isCurrent(ticket) { isAdmitting = false; automaticAdmission = false } }
+            do {
+                await peep.disconnect()
+                try generation.check(ticket)
+                guard arrivals.first?.id == arrival.id else { throw CancellationError() }
+                if !room.isActive {
+                    if let grant = try await backend.answer(hidden: false, visitID: nil) {
+                        try generation.check(ticket)
+                        try await media.connect(grant, microphone: true, camera: true)
+                        openedSeat = true
+                        try generation.check(ticket)
+                        roomName = grant.room
+                    }
+                }
+                guard arrivals.first?.id == arrival.id else { throw CancellationError() }
+                try await backend.admit(arrival.profile.id, visitID: arrival.id, into: roomName)
+                try generation.check(ticket)
+                if !room.isActive {
+                    openRoom(host: hallway.me?.handle ?? "", others: [arrival.profile])
+                }
+                removeArrival(arrival.id)
+            } catch {
+                if openedSeat, !room.isActive, generation.isCurrent(ticket) { await media.disconnect(); roomName = nil }
+                guard generation.isCurrent(ticket), !shuttingDown, !Task.isCancelled else { return }
+                problem = "Couldn’t let them in. They may have left. Try again."
+                if arrivals.first?.id == arrival.id { showCurrentArrival() }
+            }
         }
     }
 
     func toggleListening() {
         listening.toggle()
-        if room.isActive {
-            // The room keeps its level; only the doorstep seat comes up.
-            peep.volumeScale = listening ? 1 : 0
-        } else {
-            IncomingAudio.shared.setListening(listening)
+        peep.volumeScale = listening ? 1 : ((quiet || room.isActive) ? 0 : 1)
+        if !room.isActive { IncomingAudio.shared.setListening(listening) }
+        if listening, !peep.isConnected { showCurrentArrival() }
+    }
+    func dismissPeephole(stopAudio: Bool = true) {
+        guard !isAdmitting, let id = arrivals.first?.id else { return }
+        removeArrival(id)
+    }
+    private func removeArrival(_ id: UUID) {
+        let wasFirst = arrivals.first?.id == id
+        arrivalTimeouts.removeValue(forKey: id)?.cancel()
+        arrivals.removeAll { $0.id == id }
+        if wasFirst {
+            arrivalTask?.cancel()
+            listening = false
+            if arrivals.isEmpty { Task { await peep.disconnect() } }
+            showCurrentArrival()
         }
     }
-
-    func dismissPeephole(stopAudio: Bool = true) {
-        audioArriveTask?.cancel()
-        visitor = nil
-        listening = false
-        if stopAudio, !room.isActive { IncomingAudio.shared.depart() }
-        if case .peephole = state.mode { state.mode = .hallway }
-        Task { await peep.disconnect() }
+    private func showCurrentArrival() {
+        guard let arrival = arrivals.first else {
+            if case .peephole = state.mode { state.mode = .hallway }
+            if !room.isActive { IncomingAudio.shared.depart() }
+            return
+        }
+        state.mode = .peephole(arrival.profile)
+        peep.volumeScale = listening ? 1 : ((quiet || room.isActive) ? 0 : 1)
+        guard !quiet || listening else { return }
+        arrivalTask?.cancel()
+        arrivalTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                await peep.disconnect()
+                try Task.checkCancellation()
+                let grant = try await backend.answer(hidden: true, visitID: arrival.id)
+                try Task.checkCancellation()
+                guard arrivals.first?.id == arrival.id, !shuttingDown else { return }
+                if let grant { try await peep.connect(grant, microphone: false, camera: false) }
+                try Task.checkCancellation()
+                guard arrivals.first?.id == arrival.id else { return }
+                if !room.isActive { IncomingAudio.shared.arrive(muffled: !listening) }
+            } catch {
+                guard !Task.isCancelled, arrivals.first?.id == arrival.id else { return }
+                problem = "Preview unavailable. You can still try letting them in."
+            }
+        }
     }
-
-    // MARK: -
-
+    private func enqueue(_ profile: Profile, id: UUID, walkIn: Bool) {
+        guard !shuttingDown, hallway.me != nil, !arrivals.contains(where: { $0.id == id }), arrivals.count < 5 else { return }
+        let arrival = Arrival(id: id, profile: profile, walksIn: walkIn)
+        arrivals.append(arrival)
+        arrivalTimeouts[id] = Task { [weak self] in
+            try? await Task.sleep(for: self?.timeout ?? .seconds(30))
+            guard !Task.isCancelled else { return }
+            self?.removeArrival(id)
+        }
+        guard arrivals.first?.id == id else { return }
+        if walkIn, !quiet, !room.isActive, visiting == nil { openDoor(automatically: true); return }
+        if !quiet { state.knockBounce(); Sounds.knock() }
+        showCurrentArrival()
+    }
     private func handle(_ event: DoorEvent) {
         switch event {
-        case .knock(let who):
-            visitor = who
-            listening = false
-            state.mode = .peephole(who)
-            state.knockBounce()
-            Sounds.knock()
-            audioArriveTask?.cancel()
-            // Already in a room: they show in the peephole, silent until I choose to
-            // listen, and the room's own voices keep their level.
-            peep.volumeScale = room.isActive ? 0 : 1
-            audioArriveTask = Task {
-                // Peek: a hidden seat, no mic, no camera. They cannot tell anyone is there.
-                if let grant = try? await backend.answer(hidden: true) {
-                    try? await peep.connect(grant, microphone: false, camera: false)
-                }
-                try? await Task.sleep(for: .milliseconds(220))
-                guard !Task.isCancelled, !room.isActive else { return }
-                IncomingAudio.shared.arrive(muffled: true)
-            }
-            // Development: DOORBELL_AUTO_OPEN=<seconds> answers the door unattended.
-            if let wait = ProcessInfo.processInfo.environment["DOORBELL_AUTO_OPEN"].flatMap(Double.init) {
-                Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(wait))
-                    self?.openDoor()
-                }
-            }
-        case .walkIn(let who):
-            guard let me = hallway.me else { return }
-            Sounds.creak()
-            Task {
-                if room.isActive {
-                    room.include(who)   // they walked into a room that was already going
-                } else if let grant = try? await backend.answer(hidden: false) {
-                    roomName = grant.room
-                    try? await media.connect(grant, microphone: true, camera: true)
-                }
-                IncomingAudio.shared.arrive(muffled: false)
-                openRoom(host: me.handle, me: me, others: [who])
-            }
-        case .visitorLeft(let who):
-            if visitor == who { dismissPeephole() }
-        case .admitted(let who, let grant):
-            admitted(by: who, grant: grant)
+        case .knock(let who, let id): enqueue(who, id: id, walkIn: false)
+        case .walkIn(let who, let id): enqueue(who, id: id, walkIn: true)
+        case .visitorLeft(let who, let id):
+            if arrivals.contains(where: { $0.id == id && $0.profile.id == who.id }) { removeArrival(id) }
+        case .admitted(let who, let grant, let id): admitted(by: who, grant: grant, visitID: id)
         }
     }
-
-    private func openRoom(host: String, me: Profile, others: [Profile]) {
-        if room.isActive {
-            return   // already in: they'll appear as a tile
-        }
-        room.start(host: host, me: me, others: others)
-        roomWindow.present()
+    private func openRoom(host: String, others: [Profile]) {
+        guard let me = hallway.me, !shuttingDown else { return }
+        IncomingAudio.shared.arrive(muffled: false)
+        if !room.isActive { room.start(host: host, me: me, others: others) }
+        if showsWindows { roomWindow.present() }
     }
-
-    private func roomClosed() {
+    func closeRoom() {
+        if showsWindows { roomWindow.close() }
+        else { room.leave() }
+    }
+    private func requestLeaveRoom() {
+        guard !shuttingDown, !isLeaving else { return }
+        isLeaving = true
+        generation.advance(); operation?.cancel(); admissionTask?.cancel()
+        isAdmitting = false
+        finishVisit(); room.reset(); roomName = nil
         IncomingAudio.shared.depart()
-        roomName = nil
-        if let door = visiting {
-            visiting = nil
-            Task { await backend.leaveVisit(door.id) }
+        Task {
+            await media.disconnect()
+            isLeaving = false
         }
     }
-
-    // Development: the mock's door bell.
-    func simulate(_ event: DoorEvent) {
-        Task { await backend.simulate(event) }
+    func shutdown() async {
+        guard !shuttingDown else { return }
+        shuttingDown = true
+        generation.advance()
+        operation?.cancel(); admissionTask?.cancel(); arrivalTask?.cancel(); visitTimeout?.cancel()
+        for task in arrivalTimeouts.values { task.cancel() }
+        arrivalTimeouts = [:]; arrivals = []; listening = false; isAdmitting = false
+        let oldDoor = visiting; let oldID = outgoingID
+        finishVisit(); room.reset(); roomName = nil
+        if showsWindows { roomWindow.close() }
+        await media.disconnect()
+        await peep.disconnect()
+        if let oldDoor, let oldID { await backend.leaveVisit(oldDoor.id, visitID: oldID) }
+        state.mode = .hallway
+        IncomingAudio.shared.depart()
+        shuttingDown = false
     }
+    func simulate(_ event: DoorEvent) { Task { await backend.simulate(event) } }
 }

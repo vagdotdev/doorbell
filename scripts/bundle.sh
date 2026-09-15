@@ -10,6 +10,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CONFIG=${1:-release}
+# Validate before spending time compiling. Server secrets are never copied.
+mkdir -p build
+CONFIG_ARGS=()
+[[ "$CONFIG" == "debug" ]] && CONFIG_ARGS+=(--local)
+python3 scripts/client-config.py "${DOORBELL_CONFIG_FILE:-.env}" build/client.env "${CONFIG_ARGS[@]}"
 swift build -c "$CONFIG"
 BIN=$(swift build -c "$CONFIG" --show-bin-path)
 
@@ -22,9 +27,8 @@ cp -R "$BIN/Doorbell_DoorbellApp.bundle" "$APP/Contents/Resources/"
 for fw in "$BIN"/*.framework; do
   cp -R "$fw" "$APP/Contents/Frameworks/"
 done
-# Development config rides along so `open build/Doorbell.app` sees the same
-# backend as `swift run`. Local dev only; build/ is gitignored.
-[ -f .env ] && cp .env "$APP/Contents/Resources/.env"
+# Only public client configuration is bundled. Debug alone allows local services.
+cp build/client.env "$APP/Contents/Resources/.env"
 
 # Info.plist: the source of truth, plus the keys only a bundle needs.
 cp Sources/DoorbellApp/Info.plist "$APP/Contents/Info.plist"
@@ -36,8 +40,8 @@ plutil -replace NSHighResolutionCapable -bool true "$APP/Contents/Info.plist"
 # The binary was linked with @rpath frameworks; point it at Contents/Frameworks.
 install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Doorbell" 2>/dev/null || true
 
-# Ad-hoc signature: enough for a local, stable TCC identity. Real distribution
-# (Developer ID + notarization) comes with Phase 7.
+# Ad-hoc signed private beta. Fresh-Mac approval and permission persistence
+# must be tested; Developer ID/notarization can remove distribution friction later.
 codesign --force --deep --sign - "$APP"
 
 echo "→ $APP"

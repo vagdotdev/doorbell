@@ -19,7 +19,7 @@ struct VisitingView: View {
             DoorTitle(name: "\(firstName)’s door") {
                 HStack(spacing: 6) {
                     KnockingDots()
-                    Text("They can see and hear you")
+                    Text(media.phase == .connecting ? "Connecting…" : (media.problem ?? "Your camera and mic are live when enabled"))
                 }
             }
         } glass: {

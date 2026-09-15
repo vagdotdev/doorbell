@@ -7,3 +7,5 @@ DerivedData/
 .env
 supabase/.temp/
 build/
+
+.park/

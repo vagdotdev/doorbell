@@ -21,33 +21,37 @@ protocol DoorbellBackend: Sendable {
     func request(_ id: Profile.ID) async throws
     func accept(_ id: Profile.ID) async throws
     func ignore(_ id: Profile.ID) async throws
+    func removeFollower(_ id: Profile.ID) async throws
     func unfollow(_ id: Profile.ID) async throws
     func setCloseFriend(_ id: Profile.ID, _ on: Bool) async throws
 
     // Doors
     /// Go to someone's door. The backend decides whether that's a knock or a walk-in,
     /// tells them, and hands back a seat in their room.
-    func visit(_ id: Profile.ID) async throws -> Visit
+    func visit(_ id: Profile.ID, visitID: UUID) async throws -> Visit
+    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws
     /// Step away from their door.
-    func leaveVisit(_ id: Profile.ID) async
+    func leaveVisit(_ id: Profile.ID, visitID: UUID) async
     /// `hidden`: a seat on my doorstep — I see and hear the knocker, they don't see me.
     /// Otherwise a seat in my own room, as its host.
-    func answer(hidden: Bool) async throws -> MediaGrant?
+    func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant?
     /// Let a knocker in. `room` is where I am right now — my own room, or one I'm a
     /// guest in — and is where their seat will be. They hear about it on their door.
-    func admit(_ id: Profile.ID, into room: String?) async throws
+    func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws
 
     /// Development only: pretend something happened at my door.
     func simulate(_ event: DoorEvent) async
 }
 
 extension DoorbellBackend {
+    func removeFollower(_ id: Profile.ID) async throws { try await ignore(id) }
+    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {}
     func accountState() async -> AccountState { .ready }
     func signIn(email: String, password: String) async throws {}
     func signUp(email: String, password: String) async throws {}
     func claimHandle(_ handle: String, displayName: String) async throws {}
     func signOut() async {}
-    func answer(hidden: Bool) async throws -> MediaGrant? { nil }
-    func admit(_ id: Profile.ID, into room: String?) async throws {}
+    func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant? { nil }
+    func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws {}
     func simulate(_ event: DoorEvent) async {}
 }

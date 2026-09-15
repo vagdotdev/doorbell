@@ -12,32 +12,43 @@ actor SupabaseBackend: DoorbellBackend {
 
     private let client: SupabaseClient
     private var me: Profile?
+    private var sessionVersion = 0
+    private var signingOut = false
+    private var currentUserID: String? { client.auth.currentSession?.user.id.uuidString.lowercased() }
+    private let subscribe: @Sendable (RealtimeChannelV2) async throws -> Void
     /// Handles for ids seen in the last hallway, so a visit needs no extra round trip.
     private var known: [Profile.ID: Profile] = [:]
     private var door: RealtimeChannelV2?
+    private var doorOwnerID: String?
     private var doorListener: Task<Void, Never>?
 
     init(url: URL, anonKey: String, config: AppConfig) {
-        (updates, updatesOut) = AsyncStream<Void>.makeStream()
-        (events, eventsOut) = AsyncStream<DoorEvent>.makeStream()
-        client = SupabaseClient(
-            supabaseURL: url,
-            supabaseKey: anonKey,
+        self.init(client: SupabaseClient(
+            supabaseURL: url, supabaseKey: anonKey,
             options: .init(auth: .init(
-                storage: FileAuthStorage(directory: config.supportDirectory),
+                storage: MigratingAuthStorage(directory: config.supportDirectory, profile: config.profile),
                 emitLocalSessionAsInitialSession: true
             ))
-        )
+        ))
+    }
+
+    init(client: SupabaseClient, subscribe: @escaping @Sendable (RealtimeChannelV2) async throws -> Void = { try await $0.subscribeWithError() }) {
+        (updates, updatesOut) = AsyncStream<Void>.makeStream()
+        (events, eventsOut) = AsyncStream<DoorEvent>.makeStream()
+        self.client = client
+        self.subscribe = subscribe
         Task { await watchAuth() }
     }
 
     // MARK: Account
 
     func accountState() async -> AccountState {
-        guard (try? await client.auth.session) != nil else { return .signedOut }
-        if me == nil { me = try? await fetchMe() }
-        if me != nil { await listenAtMyDoor() }
-        return me == nil ? .needsHandle : .ready
+        guard !signingOut, currentUserID != nil else { return .signedOut }
+        do {
+            guard try await fetchMe() != nil else { return .needsHandle }
+            try await listenAtMyDoor()
+            return .ready
+        } catch { return currentUserID == nil ? .signedOut : .unavailable }
     }
 
     func signIn(email: String, password: String) async throws {
@@ -52,33 +63,40 @@ actor SupabaseBackend: DoorbellBackend {
 
     func claimHandle(_ handle: String, displayName: String) async throws {
         let uid = try await client.auth.session.user.id.uuidString.lowercased()
+        let version = sessionVersion
         let row = ProfileRow(id: uid, handle: handle.lowercased(), displayName: displayName, avatarURL: nil)
         try await client.from("profiles").insert(row).execute()
+        try checkSession(uid, version)
         me = row.profile
-        await listenAtMyDoor()
+        try await listenAtMyDoor()
         updatesOut.yield()
     }
 
     func signOut() async {
-        try? await client.auth.signOut()
-        me = nil
+        signingOut = true; sessionVersion += 1
+        me = nil; known = [:]
         await stopListening()
+        try? await client.auth.signOut()
+        signingOut = false
         updatesOut.yield()
     }
 
     private func watchAuth() async {
         for await (event, session) in client.auth.authStateChanges {
             switch event {
-            case .initialSession, .signedIn:
-                // `accountState()` may have fetched the profile first; either way, the
-                // door listens as soon as there is a session and a handle.
-                if session != nil {
-                    if me == nil, let p = try? await fetchMe() { me = p }
-                    await listenAtMyDoor()
-                    updatesOut.yield()
-                }
+            case .initialSession:
+                updatesOut.yield()
+            case .signedIn:
+                guard session?.user.id.uuidString.lowercased() == currentUserID else { continue }
+                sessionVersion += 1
+                me = nil; known = [:]
+                await stopListening()
+                updatesOut.yield()
             case .signedOut:
-                me = nil
+                // Ignore an old sign-out notification delivered after another sign-in.
+                guard currentUserID == nil else { continue }
+                sessionVersion += 1
+                me = nil; known = [:]
                 await stopListening()
                 updatesOut.yield()
             default: break
@@ -86,17 +104,26 @@ actor SupabaseBackend: DoorbellBackend {
         }
     }
 
+    private func checkSession(_ id: String, _ version: Int) throws {
+        guard !signingOut, currentUserID == id, sessionVersion == version else { throw CancellationError() }
+        try Task.checkCancellation()
+    }
     private func fetchMe() async throws -> Profile? {
         let uid = try await client.auth.session.user.id.uuidString.lowercased()
+        let version = sessionVersion
+        try checkSession(uid, version)
+        if let me, me.id == uid { return me }
         let rows: [ProfileRow] = try await client.from("profiles").select().eq("id", value: uid).execute().value
-        return rows.first?.profile
+        try checkSession(uid, version)
+        me = rows.first?.profile
+        return me
     }
 
     // MARK: Graph
 
     func hallway() async throws -> HallwaySnapshot {
-        if me == nil { me = try await fetchMe() }
-        guard let me else { throw BackendError.noProfile }
+        guard let me = try await fetchMe() else { throw BackendError.noProfile }
+        let version = sessionVersion
 
         async let followingRows: [EdgeRow] = client.from("follows")
             .select("status, who:profiles!followee_id(id, handle, display_name, avatar_url)")
@@ -120,6 +147,7 @@ actor SupabaseBackend: DoorbellBackend {
         let requests = followers.filter { $0.status == "pending" }.map(\.who.profile)
         let outgoing = Set(following.filter { $0.status == "pending" }.map(\.who.id))
 
+        try checkSession(me.id, version)
         for edge in following + followers { known[edge.who.id] = edge.who.profile }
         known[me.id] = me
         return HallwaySnapshot(me: me, doors: doors, requests: requests, outgoing: outgoing)
@@ -152,6 +180,11 @@ actor SupabaseBackend: DoorbellBackend {
         updatesOut.yield()
     }
 
+    func removeFollower(_ id: Profile.ID) async throws {
+        guard let me else { throw BackendError.noProfile }
+        _ = try await token(door: me.handle, intent: "revoke", guest: handle(for: id))
+        updatesOut.yield()
+    }
     func unfollow(_ id: Profile.ID) async throws {
         guard let me else { throw BackendError.noProfile }
         try await client.from("follows").delete()
@@ -172,34 +205,39 @@ actor SupabaseBackend: DoorbellBackend {
 
     // MARK: Doors
 
-    func visit(_ id: Profile.ID) async throws -> Visit {
-        guard let me else { throw BackendError.noProfile }
+    func visit(_ id: Profile.ID, visitID: UUID) async throws -> Visit {
+        guard me != nil else { throw BackendError.noProfile }
         let door = try await handle(for: id)
-        let seat = try await token(door: door, intent: "visit")
+        let seat = try await token(door: door, intent: "visit", visitID: visitID)
         // The function rang the door for us; only it may write to that channel.
         let mode: VisitMode = seat.mode == "walk_in" ? .walkIn : .knock
         guard let grant = seat.grant else { throw BackendError.noSuchDoor }
         return Visit(mode: mode, grant: grant)
     }
 
-    func leaveVisit(_ id: Profile.ID) async {
+    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {
+        _ = try await token(door: handle(for: id), intent: "ring", visitID: visitID)
+    }
+
+    func leaveVisit(_ id: Profile.ID, visitID: UUID) async {
         guard let door = try? await handle(for: id) else { return }
-        _ = try? await token(door: door, intent: "leave")
+        _ = try? await token(door: door, intent: "leave", visitID: visitID)
     }
 
-    func answer(hidden: Bool) async throws -> MediaGrant? {
+    func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant? {
         guard let me else { throw BackendError.noProfile }
-        return try await token(door: me.handle, intent: "answer", hidden: hidden).grant
+        return try await token(door: me.handle, intent: "answer", hidden: hidden, visitID: visitID).grant
     }
 
-    func admit(_ id: Profile.ID, into room: String?) async throws {
+    func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws {
         guard let me else { throw BackendError.noProfile }
-        _ = try await token(door: me.handle, intent: "admit", guest: try await handle(for: id), room: room)
+        _ = try await token(door: me.handle, intent: "admit", guest: try await handle(for: id), room: room, visitID: visitID)
     }
 
     private func token(door: String, intent: String, hidden: Bool? = nil,
-                       guest: String? = nil, room: String? = nil) async throws -> Seat {
-        var body: [String: AnyJSON] = ["door": .string(door), "intent": .string(intent)]
+                       guest: String? = nil, room: String? = nil, visitID: UUID? = nil) async throws -> Seat {
+        var body: [String: AnyJSON] = ["version": .integer(2), "door": .string(door), "intent": .string(intent)]
+        if let visitID { body["visit"] = .string(visitID.uuidString.lowercased()) }
         if let hidden { body["hidden"] = .bool(hidden) }
         if let guest { body["guest"] = .string(guest) }
         if let room { body["room"] = .string(room) }
@@ -216,49 +254,63 @@ actor SupabaseBackend: DoorbellBackend {
 
     // MARK: My door
 
-    private func listenAtMyDoor() async {
-        guard let me, door == nil else { return }
+    private func listenAtMyDoor() async throws {
+        guard let me else { return }
+        let version = sessionVersion
+        try checkSession(me.id, version)
+        if let door, doorOwnerID == me.id {
+            try await subscribe(door)
+            try checkSession(me.id, version)
+            return
+        }
+        await stopListening()
+        try checkSession(me.id, version)
         let channel = client.channel("door:\(me.handle)") { $0.isPrivate = true }
-        door = channel
+        door = channel; doorOwnerID = me.id
         let knocks = channel.broadcastStream(event: "knock")
         let walkIns = channel.broadcastStream(event: "walk_in")
         let lefts = channel.broadcastStream(event: "left")
         let admits = channel.broadcastStream(event: "admitted")
         doorListener = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
-                group.addTask { for await m in knocks { await self?.arrived(m, .knock) } }
-                group.addTask { for await m in walkIns { await self?.arrived(m, .walkIn) } }
-                group.addTask { for await m in lefts { await self?.arrived(m, .left) } }
-                group.addTask { for await m in admits { await self?.arrived(m, .admitted) } }
+                group.addTask { for await m in knocks { await self?.arrived(m, .knock, accountID: me.id) } }
+                group.addTask { for await m in walkIns { await self?.arrived(m, .walkIn, accountID: me.id) } }
+                group.addTask { for await m in lefts { await self?.arrived(m, .left, accountID: me.id) } }
+                group.addTask { for await m in admits { await self?.arrived(m, .admitted, accountID: me.id) } }
             }
         }
-        await channel.subscribe()
+        try await subscribe(channel)
+        try checkSession(me.id, version)
     }
 
     private func stopListening() async {
         doorListener?.cancel()
         doorListener = nil
-        if let door { await client.removeChannel(door) }
-        door = nil
+        let oldDoor = door
+        door = nil; doorOwnerID = nil
+        if let oldDoor { await client.removeChannel(oldDoor) }
     }
 
     private enum Arrival { case knock, walkIn, left, admitted }
 
-    private func arrived(_ message: JSONObject, _ kind: Arrival) async {
+    private func arrived(_ message: JSONObject, _ kind: Arrival, accountID: String) async {
+        let version = sessionVersion
+        guard !signingOut, !Task.isCancelled, currentUserID == accountID else { return }
         // The stream hands over the whole envelope: { type, event, payload: { from, … } }.
         guard case .object(let payload)? = message["payload"],
-              case .string(let from)? = payload["from"] else { return }
-        guard let who = await profile(handle: from) else { return }
-        NSLog("door: \(from) \(kind)")
+              case .string(let from)? = payload["from"],
+              case .string(let rawVisit)? = payload["visit"], let visitID = UUID(uuidString: rawVisit) else { return }
+        guard let who = await profile(handle: from),
+              !Task.isCancelled, !signingOut, currentUserID == accountID, sessionVersion == version else { return }
         switch kind {
-        case .knock: eventsOut.yield(.knock(who))
-        case .walkIn: eventsOut.yield(.walkIn(who))
-        case .left: eventsOut.yield(.visitorLeft(who))
+        case .knock: eventsOut.yield(.knock(who, visitID: visitID))
+        case .walkIn: eventsOut.yield(.walkIn(who, visitID: visitID))
+        case .left: eventsOut.yield(.visitorLeft(who, visitID: visitID))
         case .admitted:
             // My seat rides along: this channel is private to me, written only by the server.
             guard case .string(let url)? = payload["url"], case .string(let token)? = payload["token"],
                   case .string(let room)? = payload["room"] else { return }
-            eventsOut.yield(.admitted(who, MediaGrant(url: url, token: token, room: room)))
+            eventsOut.yield(.admitted(who, MediaGrant(url: url, token: token, room: room), visitID: visitID))
         }
     }
 
@@ -314,18 +366,4 @@ private struct Seat: Decodable {
         guard let token, let url, let room else { return nil }
         return MediaGrant(url: url, token: token, room: room)
     }
-}
-
-/// Session on disk under Application Support, per profile. Lets two accounts run on
-/// one Mac for development and keeps a bare executable out of the keychain.
-private struct FileAuthStorage: AuthLocalStorage {
-    let directory: URL
-
-    private func url(_ key: String) -> URL {
-        directory.appendingPathComponent(key.replacingOccurrences(of: "/", with: "_") + ".json")
-    }
-
-    func store(key: String, value: Data) throws { try value.write(to: url(key), options: .atomic) }
-    func retrieve(key: String) throws -> Data? { try? Data(contentsOf: url(key)) }
-    func remove(key: String) throws { try? FileManager.default.removeItem(at: url(key)) }
 }

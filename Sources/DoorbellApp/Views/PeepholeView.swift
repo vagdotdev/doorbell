@@ -24,7 +24,7 @@ struct PeepholeView: View {
             }
         } glass: {
             DoorGlass(style: style, emphasized: door.listening) {
-                if let track = peep.peers.first?.video {
+                if let track = peep.peers.first(where: { $0.id == visitor.handle })?.video {
                     LiveVideo(track: track, mirrored: false)
                 } else if AppConfig.current.useSupabase {
                     Placeholder(profile: visitor)
@@ -35,7 +35,7 @@ struct PeepholeView: View {
             }
         } controls: {
             HStack(spacing: 20) {
-                RoundControl(symbol: "xmark", label: "Not Now") { door.dismissPeephole() }
+                RoundControl(symbol: "xmark", label: "Not Now") { door.dismissPeephole() }.disabled(door.isAdmitting)
                 RoundControl(symbol: door.listening ? "speaker.wave.3.fill" : "speaker.wave.2",
                              label: door.listening ? "Listening" : "Listen",
                              active: door.listening) {
@@ -43,7 +43,7 @@ struct PeepholeView: View {
                 }
                 // In a room already: they join it. Otherwise they come into yours.
                 RoundControl(symbol: "door.left.hand.open", label: door.room.isActive ? "Let In" : "Accept",
-                             tint: DesignTokens.openDoor) { door.openDoor() }
+                             tint: DesignTokens.openDoor) { door.openDoor() }.disabled(door.isAdmitting)
             }
         }
         .task {
