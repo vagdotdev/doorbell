@@ -75,6 +75,12 @@ Focus detection, camera/mic-in-use detection, pinhole mode. Nothing published.
 
 Check: start a Meet in the browser, get knocked — pinhole only, silent. Turn on Focus — same.
 
+## Phase 6½ — First launch and the app window ⬜
+
+A real window for the first ten seconds (animation, sign in, handle, permissions) and, after that, the one place settings live: two columns — Privacy (Close Friends first), Audio, Window, Settings. Sign in with Apple as the default, Google second, magic link under them. Requests and Settings move out of the notch board. Spec: `docs/first-launch.md`.
+
+Check: a stranger opens the DMG, understands the app from the animation, signs in with Apple, picks a handle, grants camera and mic, and is at the hallway — without reading anything longer than a sentence.
+
 ## Phase 7 — Ship-quality ⬜
 
 Design pass on every surface: illustration for empty states, sound design (knock, creak, chime), warm room accents, motion tuning. Developer ID signing + notarization, Sparkle updates, launch at login, crash reporting. Battery: idle draw measured and equal to a menu-bar clock.

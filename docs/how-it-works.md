@@ -124,6 +124,8 @@ Vagdev is mid-conversation — in his own room, or a guest in Priya's — and Ar
 
 Let In calls `admit { guest: "arjun", room: <the room Vagdev is in> }`. For a room that isn't Vagdev's, the function first checks that Vagdev is a visible participant of it — he can vouch someone into a room only from inside it. Arjun's seat lands in that room, captioned "Arjun · friend of Vagdev" to whoever doesn't know him. Someone new walked in and said hello; nobody exchanged a link.
 
+Who decides: the person who was knocked on, and only them. The knock is on Vagdev's door, so Vagdev alone sees it and alone chooses, even when the room belongs to Priya. Priya sees nothing until Arjun is inside. This is deliberate (decided over the alternatives — everyone in the room can admit, or only the room's host can): a knock stays private to the door it was made on, the same rule as everywhere else.
+
 No `knocks` table exists. Knocks are never logged, counted, or shown later.
 
 Peephole style (`rectangle` | `eyehole`) is a local `UserDefaults` value. It never leaves the machine.
