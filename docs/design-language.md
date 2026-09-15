@@ -68,3 +68,31 @@ the generic shine.
    where media plays. Glass everywhere = glass nowhere.
 4. **Compact grammar extended.** `[avatar/art | text | meter]` where avatar can
    be a friend: idle door shows presence dots, knock shows peephole preview.
+
+## The atmosphere: pitch black, and almost nothing else
+
+The feeling we are after — the polish of a screen like Astra's welcome, where a
+black sky and one piece of glass carry the whole thing — comes from restraint,
+not from effects. We looked at that screen for its *mood*; nothing from it is
+here. The rule: the shell is pitch black, and the few things drawn on it are
+there to give the black depth, never to decorate it. If a layer can be removed
+and the shell still reads as a space, remove it.
+
+What is allowed, all in `Atmosphere.swift`:
+
+- **Starfield.** Sparse, still, seeded. White only, most of it near invisible.
+  This is what makes the black a space rather than a fill.
+- **Doorstep.** Black glass whose crown sits `doorstepRise` above the floor;
+  the controls stand on it. Drawn with two things: a 1 pt hairline where the
+  light catches the rim, and a breath of the same light outside it, gone within
+  a few points. It fades from the crown down so the arc dissolves before it
+  meets the sides. `lit` (listening, a knock landing) lifts it a touch; that is
+  the only thing that moves.
+- **One light.** `horizon` is a barely-blue white, and it is the only colour
+  the atmosphere has. Rims, halos, the doorstep — all the same light. The two
+  accents (utility blue, social amber) stay on controls and never leak into the
+  background.
+
+What is not allowed: coloured glows, horizon washes, blurs, reflections,
+anything that reads as a "theme". Gradients only, and few of them. Idle Doorbell
+must cost nothing to draw.

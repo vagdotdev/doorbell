@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>dev.vag.doorbell</string>
+	<key>CFBundleName</key>
+	<string>Doorbell</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Friends see you when you knock on their door, and in the room.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Friends hear you when you knock on their door, and in the room.</string>
+	<key>LSUIElement</key>
+	<true/>
+</dict>
+</plist>
