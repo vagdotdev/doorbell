@@ -23,6 +23,8 @@ Each is in `.automatic` mode: LiveKit uses Apple's Voice Processing I/O when the
 
 macOS 12+ has a system-wide microphone mode — Standard, Voice Isolation, Wide Spectrum — that applies to any app using Apple voice processing, which we do. Voice Isolation is Apple's ML voice separator; it is very good and costs us nothing. Apps cannot set it, only the user can, from Control Center while the mic is live. Settings → Microphone shows the current mode and opens the system picker (`AVCaptureDevice.showSystemUserInterface(.microphoneModes)`). The modes are only selectable while a mic is actually capturing, so the picker is most useful from inside a room or while knocking; from an idle app it shows the current mode greyed out.
 
+Because of that, the first time this Mac's microphone goes live for a door — the first knock or walk-in — and the mode is still Standard, the picker opens once by itself (`MicrophoneMode.nudgeOnce`). Voice Isolation is then one click away at the exact moment it can be chosen. It never asks again; the choice is the system's and persists across every app.
+
 Between these two, a Mac in a normal room sounds close to what people expect from Meet or FaceTime.
 
 ## What we researched and did not add

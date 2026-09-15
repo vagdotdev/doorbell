@@ -17,4 +17,5 @@ enum PeepholeStyle: String, CaseIterable, Identifiable {
 enum SettingsKey {
     static let peepholeStyle = "peepholeStyle"
     static let soundsEnabled = "soundsEnabled"
+    static let micModeNudged = "micModeNudged"
 }

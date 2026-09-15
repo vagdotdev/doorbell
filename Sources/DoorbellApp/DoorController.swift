@@ -68,6 +68,8 @@ final class DoorController: ObservableObject {
             }
             if let grant = visit.grant {
                 try? await media.connect(grant, microphone: true, camera: true)
+                // Mic is live now: the one moment macOS lets Voice Isolation be chosen.
+                if media.isConnected { MicrophoneMode.nudgeOnce() }
             }
         }
     }
