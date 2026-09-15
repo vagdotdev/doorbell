@@ -53,11 +53,10 @@ struct NotchGeometry {
         }
     }
 
-    /// The body plus the fillets that flare into the screen edge on either side.
+    /// What the window is sized to. The shell no longer flares into the screen edge,
+    /// so this is the body itself; kept as a seam in case the silhouette grows again.
     func frameSize(for kind: ShellKind) -> CGSize {
-        let body = size(for: kind)
-        let fillet = kind == .compact ? DesignTokens.compactFillet : DesignTokens.shellFillet
-        return CGSize(width: body.width + 2 * fillet, height: body.height)
+        size(for: kind)
     }
 
     /// A rect of the given size, top-centred and flush with the top edge of the screen.

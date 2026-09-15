@@ -1,37 +1,37 @@
 import SwiftUI
 
-/// The shell's silhouette. Flush with the screen edge, it flares into it through
-/// concave top fillets — the way the hardware notch meets the bezel — and rounds off
-/// at the bottom. The path is left open along the top so a stroke draws only the
-/// visible outline; fills and clips close it implicitly.
+/// The shell's silhouette: a rounded rectangle with its own radius top and bottom.
+/// At rest the top is square and hidden inside the hardware notch; open, all four
+/// corners round off and the shell reads as one clean card at the top of the screen.
+/// Both radii animate, so the card grows out of the notch without a seam.
 struct NotchShape: Shape {
-    var topFillet: CGFloat
+    var topRadius: CGFloat
     var bottomRadius: CGFloat
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(topFillet, bottomRadius) }
-        set { topFillet = newValue.first; bottomRadius = newValue.second }
+        get { AnimatablePair(topRadius, bottomRadius) }
+        set { topRadius = newValue.first; bottomRadius = newValue.second }
     }
 
     func path(in rect: CGRect) -> Path {
-        let f = max(0, min(topFillet, rect.height / 2))
-        let left = rect.minX + f
-        let right = rect.maxX - f
-        let r = max(0, min(bottomRadius, (right - left) / 2, rect.height - f))
+        let limit = min(rect.width / 2, rect.height / 2)
+        let t = max(0, min(topRadius, limit))
+        let b = max(0, min(bottomRadius, limit))
 
         var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addArc(tangent1End: CGPoint(x: left, y: rect.minY),
-                 tangent2End: CGPoint(x: left, y: rect.minY + f), radius: f)
-        p.addLine(to: CGPoint(x: left, y: rect.maxY - r))
-        p.addArc(tangent1End: CGPoint(x: left, y: rect.maxY),
-                 tangent2End: CGPoint(x: left + r, y: rect.maxY), radius: r)
-        p.addLine(to: CGPoint(x: right - r, y: rect.maxY))
-        p.addArc(tangent1End: CGPoint(x: right, y: rect.maxY),
-                 tangent2End: CGPoint(x: right, y: rect.maxY - r), radius: r)
-        p.addLine(to: CGPoint(x: right, y: rect.minY + f))
-        p.addArc(tangent1End: CGPoint(x: right, y: rect.minY),
-                 tangent2End: CGPoint(x: rect.maxX, y: rect.minY), radius: f)
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY + t))
+        p.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY),
+                 tangent2End: CGPoint(x: rect.minX + t, y: rect.minY), radius: t)
+        p.addLine(to: CGPoint(x: rect.maxX - t, y: rect.minY))
+        p.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY),
+                 tangent2End: CGPoint(x: rect.maxX, y: rect.minY + t), radius: t)
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - b))
+        p.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY),
+                 tangent2End: CGPoint(x: rect.maxX - b, y: rect.maxY), radius: b)
+        p.addLine(to: CGPoint(x: rect.minX + b, y: rect.maxY))
+        p.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY),
+                 tangent2End: CGPoint(x: rect.minX, y: rect.maxY - b), radius: b)
+        p.closeSubpath()
         return p
     }
 }

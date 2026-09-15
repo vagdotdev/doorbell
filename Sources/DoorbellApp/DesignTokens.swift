@@ -3,11 +3,10 @@ import SwiftUI
 /// Single source of truth for Doorbell's visual language.
 /// Values distilled from the NotchNook + DynamicLake study in docs/design-language.md.
 enum DesignTokens {
-    // Silhouette. Bottom corners round off; top corners flare into the screen edge.
+    // Silhouette. At rest: the notch (square top, hidden in the hardware). Open: one
+    // rounded rectangle, the same radius on every corner.
     static let compactRadius: CGFloat = 12
-    static let compactFillet: CGFloat = 6
-    static let shellRadius: CGFloat = 32
-    static let shellFillet: CGFloat = 16
+    static let shellRadius: CGFloat = 28
 
     // One expanded width for everything; only the height breathes.
     static let expandedWidth: CGFloat = 480
@@ -60,8 +59,8 @@ enum DesignTokens {
 
     // Motion
     static let spring = Animation.interpolatingSpring(stiffness: 300, damping: 28)
-    /// Opening overshoots a touch — that is what makes it feel alive. Closing settles clean.
-    static let springOpen = Animation.spring(response: 0.42, dampingFraction: 0.74)
+    /// Opening is quick and lands once; no visible overshoot. Closing settles clean.
+    static let springOpen = Animation.spring(response: 0.38, dampingFraction: 0.88)
     static let springClose = Animation.spring(response: 0.34, dampingFraction: 0.92)
     /// Time the window waits after a shape change before snapping to the exact frame.
     static let springSettle: Duration = .milliseconds(600)

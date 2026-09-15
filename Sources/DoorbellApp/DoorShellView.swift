@@ -11,8 +11,8 @@ struct DoorShellView: View {
 
     private var shape: NotchShape {
         state.isExpanded
-            ? NotchShape(topFillet: DesignTokens.shellFillet, bottomRadius: DesignTokens.shellRadius)
-            : NotchShape(topFillet: DesignTokens.compactFillet, bottomRadius: DesignTokens.compactRadius)
+            ? NotchShape(topRadius: DesignTokens.shellRadius, bottomRadius: DesignTokens.shellRadius)
+            : NotchShape(topRadius: 0, bottomRadius: DesignTokens.compactRadius)
     }
 
     var body: some View {
