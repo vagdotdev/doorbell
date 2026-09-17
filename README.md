@@ -106,3 +106,34 @@ Camera, microphone, and screen recording permission remain required. A cloud-rea
 package and a fresh-Mac install have **not** been verified yet.
 
 See [release evidence and remaining checks](docs/reliable-doors.md).
+
+## App window and onboarding
+
+The first launch opens a normal window. After setup, use the notch gear or menu bar
+→ **Open Doorbell** to manage Close Friends, followers, requests, audio, window
+preferences and your account. Close Friends includes everyone allowed to knock,
+even if you don't follow them back. Errors remain visible and failed changes can be
+retried. Camera and microphone are requested separately; continuing without access
+is supported, and Privacy links back to macOS permission settings.
+
+Sessions are stored in the macOS Keychain, separately for each `DOORBELL_PROFILE`.
+Existing session files migrate after a successful Keychain write. The app bundle
+includes only the three public client configuration keys, never arbitrary `.env`
+contents. Release builds still need Developer ID signing and notarization.
+
+For cloud auth, enable Apple/Google and email sign-in in Supabase and allow
+`doorbell://auth` as a redirect URL. The client uses PKCE and the SDK's browser auth
+session. Email/password is available on the local backend. See
+`docs/first-launch.md` for remaining release work.
+
+Verification:
+
+```sh
+swift test                   # account lifecycle, validation, graph, onboarding
+scripts/test-graph.sh         # local Supabase RLS regressions; always rolls back
+scripts/bundle.sh debug       # runnable app with usage strings and callback scheme
+```
+
+Apply `20260915160000_graph_integrity.sql` through the normal migration workflow
+before shipping the updated backend. It prevents edge/handle identity rewriting
+and ensures follower-side unfollow revokes Close Friends access.

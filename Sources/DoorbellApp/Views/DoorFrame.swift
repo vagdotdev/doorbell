@@ -26,13 +26,10 @@ struct DoorFrame<Title: View, Glass: View, Controls: View>: View {
         .frame(maxWidth: .infinity)
         .padding(.bottom, 12)
         .background {
-            // The notch row stays pure black; the space opens up beneath it.
+            // The shell already carries the stars; the doorstep rises beneath the notch row.
             VStack(spacing: 0) {
                 Color.clear.frame(height: geometry.notchHeight)
-                ZStack {
-                    Starfield(seed: 3)
-                    Doorstep(rise: DesignTokens.doorstepRise, lit: lit)
-                }
+                Doorstep(rise: DesignTokens.doorstepRise, lit: lit)
             }
         }
     }

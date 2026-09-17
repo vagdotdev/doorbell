@@ -60,7 +60,7 @@ private struct AtTheDoor: View {
     var body: some View {
         HStack(spacing: 10) {
             AvatarView(profile: visitor, size: 24)
-            Text("\(visitor.displayName) is at the door")
+            Text("\(visitor.displayName) is knocking")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(DesignTokens.ink)
                 .lineLimit(1)

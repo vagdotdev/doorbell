@@ -16,12 +16,12 @@ final class IncomingAudio: ObservableObject {
 
     /// Someone starts talking. `muffled` is the peephole (door volume).
     func arrive(muffled: Bool) {
-        ramp(to: muffled ? DesignTokens.doorVolume : 1,
+        ramp(to: muffled ? SettingsKey.currentDoorVolume : 1,
              duration: muffled ? DesignTokens.audioArrive : DesignTokens.audioEnter)
     }
 
     func setListening(_ on: Bool) {
-        ramp(to: on ? 1 : DesignTokens.doorVolume, duration: DesignTokens.audioListen)
+        ramp(to: on ? 1 : SettingsKey.currentDoorVolume, duration: DesignTokens.audioListen)
     }
 
     func depart() {

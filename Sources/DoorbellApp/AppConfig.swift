@@ -13,6 +13,15 @@ struct AppConfig: Sendable {
     let useSupabase: Bool
 
     static let current = AppConfig()
+    static let authRedirect = URL(string: "doorbell://auth")!
+    var isLocalBackend: Bool {
+        ["localhost", "127.0.0.1", "::1"].contains(supabaseURL?.host ?? "")
+    }
+    static func acceptsAuthCallback(_ url: URL) -> Bool {
+        guard url.scheme == "doorbell", url.host == "auth", url.path.isEmpty,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        return components.queryItems?.contains { $0.name == "code" && $0.value?.isEmpty == false } == true
+    }
 
     private init() {
         var values = ProcessInfo.processInfo.environment

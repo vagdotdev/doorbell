@@ -48,7 +48,9 @@ actor SupabaseBackend: DoorbellBackend {
             guard try await fetchMe() != nil else { return .needsHandle }
             try await listenAtMyDoor()
             return .ready
-        } catch { return currentUserID == nil ? .signedOut : .unavailable }
+        } catch {
+            return currentUserID == nil ? .signedOut : .unavailable("Couldn't load your account. Check your connection and try again.")
+        }
     }
 
     func signIn(email: String, password: String) async throws {
@@ -56,12 +58,30 @@ actor SupabaseBackend: DoorbellBackend {
         updatesOut.yield()
     }
 
+    func signIn(provider: AccountProvider) async throws {
+        try await client.auth.signInWithOAuth(provider: provider == .apple ? .apple : .google,
+                                              redirectTo: AppConfig.authRedirect)
+        updatesOut.yield()
+    }
+
+    func sendMagicLink(email: String) async throws {
+        try await client.auth.signInWithOTP(email: email, redirectTo: AppConfig.authRedirect)
+    }
+
+    func handleAuthCallback(_ url: URL) async throws {
+        guard AppConfig.acceptsAuthCallback(url) else { throw BackendError.invalidCallback }
+        try await client.auth.session(from: url)
+        updatesOut.yield()
+    }
+
     func signUp(email: String, password: String) async throws {
-        try await client.auth.signUp(email: email, password: password)
+        let response = try await client.auth.signUp(email: email, password: password)
+        if response.session == nil { throw BackendError.confirmEmail }
         updatesOut.yield()
     }
 
     func claimHandle(_ handle: String, displayName: String) async throws {
+        guard ProfileValidation.validHandle(handle), ProfileValidation.validName(displayName) else { throw BackendError.invalidProfile }
         let uid = try await client.auth.session.user.id.uuidString.lowercased()
         let version = sessionVersion
         let row = ProfileRow(id: uid, handle: handle.lowercased(), displayName: displayName, avatarURL: nil)
@@ -150,7 +170,10 @@ actor SupabaseBackend: DoorbellBackend {
         try checkSession(me.id, version)
         for edge in following + followers { known[edge.who.id] = edge.who.profile }
         known[me.id] = me
-        return HallwaySnapshot(me: me, doors: doors, requests: requests, outgoing: outgoing)
+        let acceptedFollowers = followers.filter { $0.status == "accepted" }.map {
+            Door(profile: $0.who.profile, followsMe: true, isCloseFriend: close.contains($0.who.id))
+        }
+        return HallwaySnapshot(me: me, doors: doors, followers: acceptedFollowers, requests: requests, outgoing: outgoing)
     }
 
     func search(_ query: String) async throws -> [Profile] {
@@ -192,10 +215,23 @@ actor SupabaseBackend: DoorbellBackend {
         updatesOut.yield()
     }
 
+    func updateDisplayName(_ name: String) async throws {
+        guard ProfileValidation.validName(name), let me else { throw BackendError.invalidProfile }
+        try await client.from("profiles").update(["display_name": name]).eq("id", value: me.id).execute()
+        self.me = try await fetchMe()
+        updatesOut.yield()
+    }
+
+    func isHandleAvailable(_ handle: String) async throws -> Bool {
+        guard ProfileValidation.validHandle(handle) else { return false }
+        let rows: [ProfileRow] = try await client.rpc("search_profiles", params: ["q": handle]).execute().value
+        return !rows.contains { $0.handle == handle }
+    }
+
     func setCloseFriend(_ id: Profile.ID, _ on: Bool) async throws {
         guard let me else { throw BackendError.noProfile }
         if on {
-            try await client.from("close_friends").insert(["owner_id": me.id, "member_id": id]).execute()
+            try await client.from("close_friends").upsert(["owner_id": me.id, "member_id": id]).execute()
         } else {
             try await client.from("close_friends").delete()
                 .eq("owner_id", value: me.id).eq("member_id", value: id).execute()
@@ -323,8 +359,17 @@ actor SupabaseBackend: DoorbellBackend {
     }
 }
 
-enum BackendError: Error {
-    case noProfile, noSuchDoor
+enum BackendError: LocalizedError {
+    case noProfile, noSuchDoor, confirmEmail, invalidProfile, invalidCallback
+    var errorDescription: String? {
+        switch self {
+        case .invalidCallback: "This sign-in link is invalid or expired. Request a new link."
+        case .noProfile: "Sign in and finish setting up your profile."
+        case .noSuchDoor: "That door is no longer available."
+        case .confirmEmail: "Check your email to confirm your account, then sign in here."
+        case .invalidProfile: "Use a 3–20 character handle (a–z, 0–9, _) and a name of 1–60 characters."
+        }
+    }
 }
 
 // MARK: - Rows

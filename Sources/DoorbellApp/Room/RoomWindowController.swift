@@ -39,9 +39,17 @@ final class RoomWindowController: NSWindowController, NSWindowDelegate {
     func present() {
         guard let window else { return }
         window.title = "Doorbell"   // for Mission Control and the Window menu; the titlebar itself is hidden
-        if !window.isVisible { window.center() }
+        if !window.isVisible {
+            let screen = UserDefaults.standard.bool(forKey: SettingsKey.roomOnNotchScreen)
+                ? NotchGeometry.current().screen : (NSScreen.main ?? NotchGeometry.current().screen)
+            let area = screen.visibleFrame
+            window.setFrameOrigin(NSPoint(x: area.midX - window.frame.width / 2, y: area.midY - window.frame.height / 2))
+        }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        if UserDefaults.standard.bool(forKey: SettingsKey.roomFullscreen), !window.styleMask.contains(.fullScreen) {
+            window.toggleFullScreen(nil)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

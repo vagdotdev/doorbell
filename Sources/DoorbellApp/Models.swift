@@ -25,6 +25,8 @@ struct Door: Identifiable, Hashable, Sendable {
 struct HallwaySnapshot: Sendable {
     var me: Profile
     var doors: [Door]
+    /// All accepted incoming follows, including people you do not follow back.
+    var followers: [Door] = []
     /// People asking to follow you.
     var requests: [Profile]
     /// Profile ids you've requested and are waiting on.
@@ -61,9 +63,12 @@ struct Visit: Sendable {
 }
 
 /// Where the account stands. The mock is always `ready`.
+enum AccountProvider: Sendable { case apple, google }
+
 enum AccountState: Sendable, Equatable {
+    case loading
+    case unavailable(String)
     case signedOut
-    case unavailable
     /// Signed in, but no profile row yet: pick a handle.
     case needsHandle
     case ready

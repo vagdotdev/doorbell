@@ -1,12 +1,23 @@
 # First launch, and the app window
 
-Today Doorbell has no window of its own until someone is at a door. Sign-in and the
-handle live in the notch board, which is fine for us and wrong for a stranger: the
-first thing a new person sees should be a real app, once, that explains itself in
-ten seconds and then gets out of the way. After that the notch is the product and
-the window is where settings live.
+Implemented locally: one reusable app window, intro → account → permissions, and
+Privacy / Audio / Window / Settings. The gear, own door and menu bar open it.
+Onboarding resumes per development profile and completes per account. Closing it
+never quits the notch.
 
-Not built yet. This is the spec so it is built once.
+Privacy lists **all accepted followers**, including people you don't follow back.
+Removal ends both follow directions and revokes future walk-in access; existing
+calls are not forcibly ended. Audio device choices, door volume, glass, room screen,
+fullscreen and launch at login are wired to runtime behavior. Account names can be
+edited; sign-out drains media before clearing the session.
+
+Cloud sign-in uses the SDK's PKCE browser flow for Apple and Google, plus email
+links returning to `doorbell://auth`. Email/password stays on localhost only.
+Provider configuration and delivery need cloud verification. Native Apple sheets,
+avatar editing, account deletion, automatic updates and the commissioned animation
+remain release work. The short native animation is a placeholder.
+
+The design specification below records the intended full release.
 
 ## 1. First run
 

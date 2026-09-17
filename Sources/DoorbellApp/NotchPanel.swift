@@ -14,6 +14,7 @@ final class NotchPanel: NSPanel {
     private var clickOutsideMonitor: Any?
     private var hoverMonitors: [Any] = []
     private var settleTask: Task<Void, Never>?
+    private lazy var appWindow = AppWindowController(hallway: hallway, door: door)
     private var accountSink: AnyCancellable?
 
     init() {
@@ -60,14 +61,20 @@ final class NotchPanel: NSPanel {
             // Typing needs key status; a non-activating panel gets it without stealing the app.
             if mode == .search || mode == .account { self?.makeKey() }
         }
-        // Signed out → the board is the sign-in form and stays open. Ready → let go.
+        hallway.openWindow = { [weak self] in self?.openAppWindow() }
+        appWindow.model.finish = { [weak self] in
+            self?.appWindow.close()
+            self?.state.mode = .hallway
+            self?.state.isHovering = true
+        }
+        // Account changes reuse the same first-launch window; no duplicate shells.
         accountSink = hallway.$account.removeDuplicates().sink { [weak self] account in
             guard let self else { return }
-            if account != .ready {
-                state.mode = .account
-            } else if state.mode == .account {
-                state.mode = .hallway
+            if account == .loading { return }
+            if account != .ready || hallway.me.map({ !appWindow.model.completed.contains($0.id) }) != false {
+                appWindow.present()
             }
+            if state.mode == .account { state.mode = .hallway }
         }
 
         // A pinned shell (search, settings…) lets go when you click anywhere else.
@@ -87,6 +94,10 @@ final class NotchPanel: NSPanel {
         }) { hoverMonitors.append(local) }
     }
 
+    func handleAuthCallback(_ url: URL) { hallway.handleAuthCallback(url) }
+
+    func openAppWindow() { appWindow.present() }
+
     private func trackMouse() {
         // Against the shell's own rect, not the window's: while a spring settles the
         // window is deliberately larger than the shell, and that slack must not count.
@@ -103,7 +114,7 @@ final class NotchPanel: NSPanel {
         Snapshot.armIfRequested(window: self)
         // Hover can't be scripted without Accessibility rights, so for screenshots:
         //   DOORBELL_START_EXPANDED=1
-        //   DOORBELL_START_MODE=search|requests|settings|shelf|visit:arjun
+        //   DOORBELL_START_MODE=search|shelf|visit:arjun|window:friends|window:audio|window:window|window:settings
         //   DOORBELL_SIMULATE=knock:arjun|walkin:arjun   (handled by MockBackend)
         let env = ProcessInfo.processInfo.environment
         //   DOORBELL_SIGNIN=email:password  (real backend) sign in before anything else
@@ -114,8 +125,10 @@ final class NotchPanel: NSPanel {
         if let mode = env["DOORBELL_START_MODE"] {
             switch mode {
             case "search": state.mode = .search
-            case "requests": state.mode = .requests
-            case "settings": state.mode = .settings
+            case "requests": appWindow.present(page: .friends)
+            case "settings": appWindow.present(page: .settings)
+            case let w where w.hasPrefix("window:"):
+                appWindow.present(page: AppWindowModel.Page(rawValue: String(w.dropFirst(7)).capitalized))
             case "shelf": state.mode = .shelf; state.isHovering = true
             case let v where v.hasPrefix("visit:"):
                 let handle = String(v.dropFirst(6))

@@ -1,27 +1,62 @@
 import SwiftUI
 
-/// A row of doors. Yours first, then everyone you follow, then a way to find more.
+/// A row of friends. You first, then everyone you follow, then a way to find more.
+/// Wider than the shell, it pages: chevrons appear at whichever edge has more.
 struct HallwayView: View {
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var hallway: HallwayStore
+    @State private var offset: CGFloat = 0
+    @State private var overflow: CGFloat = 0   // content width minus visible width
+    @State private var scrollTarget: String?
+
+    // Sub-pixel jitter while the shell's spring settles must not flicker the chevrons.
+    private var canGoBack: Bool { offset > 4 }
+    private var canGoForward: Bool { overflow - offset > 4 }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 18) {
+            HStack(alignment: .top, spacing: cardSpacing) {
                 if let me = hallway.me {
                     OwnDoorCard(me: me, requests: hallway.requests.count) {
-                        state.mode = .requests
+                        hallway.openWindow?()
                     }
+                    .id("me")
                 }
                 ForEach(hallway.doors) { door in
-                    DoorCard(door: door)
+                    DoorCard(door: door).id(door.id)
                 }
                 AddDoorCard { state.mode = .search }
+                    .id("add")
             }
-            .padding(.horizontal, 22)
+            .scrollTargetLayout()
+            .padding(.horizontal, rowInset)
         }
         .scrollClipDisabled()
+        .scrollPosition(id: $scrollTarget, anchor: .leading)
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, x in offset = x }
+        .onScrollGeometryChange(for: CGFloat.self) { max(0, $0.contentSize.width - $0.containerSize.width) } action: { _, o in overflow = o }
+        .overlay(alignment: .leading) {
+            if canGoBack { PageChevron(forward: false) { page(by: -1) } }
+        }
+        .overlay(alignment: .trailing) {
+            if canGoForward { PageChevron(forward: true) { page(by: 1) } }
+        }
+        .animation(.easeOut(duration: 0.15), value: canGoBack)
+        .animation(.easeOut(duration: 0.15), value: canGoForward)
         .frame(maxHeight: .infinity)
+    }
+
+    private var ids: [String] {
+        (hallway.me == nil ? [] : ["me"]) + hallway.doors.map(\.id) + ["add"]
+    }
+
+    /// One page is however many whole cards fit in the shell.
+    private func page(by direction: Int) {
+        let visible = DesignTokens.expandedWidth - rowInset * 2
+        let perPage = max(1, Int((visible + cardSpacing) / (cardWidth + cardSpacing)))
+        let current = Int(round(offset / (cardWidth + cardSpacing)))
+        let next = min(max(0, current + direction * perPage), max(0, ids.count - perPage))
+        withAnimation(DesignTokens.springOpen) { scrollTarget = ids[next] }
     }
 }
 
@@ -29,6 +64,31 @@ struct HallwayView: View {
 
 private let avatarSize: CGFloat = 54
 private let cardWidth: CGFloat = 76
+private let cardSpacing: CGFloat = 18
+private let rowInset: CGFloat = 22
+
+private struct PageChevron: View {
+    let forward: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: forward ? "chevron.right" : "chevron.left")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hovering ? DesignTokens.ink : DesignTokens.inkSecondary)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(.black.opacity(0.85)))
+                .overlay(Circle().strokeBorder(DesignTokens.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .padding(.horizontal, 6)
+        // Sits at avatar height, where the eye already is.
+        .offset(y: -(cardWidth - avatarSize) / 2 - 6)
+        .transition(.opacity)
+    }
+}
 
 private struct DoorCard: View {
     let door: Door
@@ -45,7 +105,7 @@ private struct DoorCard: View {
                     .overlay {
                         if door.isCloseFriend {
                             Circle()
-                                .strokeBorder(DesignTokens.social, lineWidth: 2)
+                                .strokeBorder(DesignTokens.openDoor, lineWidth: 2)
                                 .padding(-4)
                         }
                     }
@@ -66,16 +126,13 @@ private struct DoorCard: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .contextMenu {
-            Toggle("Allow Walk-ins", isOn: Binding(
+            Toggle("Close Friend", isOn: Binding(
                 get: { door.isCloseFriend },
                 set: { hallway.setCloseFriend(door.profile, $0) }
             ))
-            .disabled(!door.followsMe)
+            .disabled(!door.followsMe || hallway.busy)
             if !door.followsMe {
-                Text("Available when they follow you")
-            }
-            if door.followsMe {
-                Button("Remove Follower", role: .destructive) { hallway.removeFollower(door.profile) }
+                Text("Available once they follow you back")
             }
             Divider()
             Button("Unfollow @\(door.profile.handle)", role: .destructive) {

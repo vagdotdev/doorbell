@@ -26,6 +26,7 @@ let package = Package(
                               "-Xlinker", "__info_plist", "-Xlinker", "Sources/DoorbellApp/Info.plist"])
             ]
         ),
-        .testTarget(name: "DoorbellTests", dependencies: ["DoorbellApp"], path: "Tests/DoorbellTests")
+        .testTarget(name: "DoorbellTests", dependencies: ["DoorbellApp"], path: "Tests/DoorbellTests"),
+        .testTarget(name: "DoorbellAppTests", dependencies: ["DoorbellApp"], path: "Tests/DoorbellAppTests"),
     ]
 )
