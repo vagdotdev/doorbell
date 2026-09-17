@@ -195,6 +195,13 @@ final class DoorController: ObservableObject {
         Sounds.stopKnock()
         removeArrival(id)
     }
+
+    /// Clicked the do-not-disturb pinhole: look properly.
+    func answerPinhole() {
+        guard case .pinhole(_, let walkedIn) = state.mode else { return }
+        if walkedIn { openDoor() }
+        else { showCurrentArrival() }
+    }
     private func removeArrival(_ id: UUID) {
         let wasFirst = arrivals.first?.id == id
         arrivalTimeouts.removeValue(forKey: id)?.cancel()

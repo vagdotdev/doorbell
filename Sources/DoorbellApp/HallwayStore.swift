@@ -111,6 +111,7 @@ final class HallwayStore: ObservableObject {
     func request(_ profile: Profile) { perform { try await $0.request(profile.id) } }
     func accept(_ profile: Profile) { perform { try await $0.accept(profile.id) } }
     func ignore(_ profile: Profile) { perform { try await $0.ignore(profile.id) } }
+    func removeFollower(_ profile: Profile) { perform { try await $0.removeFollower(profile.id) } }
     func unfollow(_ profile: Profile) { perform { try await $0.unfollow(profile.id) } }
     func setCloseFriend(_ profile: Profile, _ on: Bool) {
         perform { try await $0.setCloseFriend(profile.id, on) }
