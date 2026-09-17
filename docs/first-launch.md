@@ -67,10 +67,10 @@ list; right, the page. Nothing else — no toolbar, no tabs, no search.
 ```
 
 **Privacy** — first item, first page.
-- *Close Friends*: everyone you follow back, each with a switch. On = they walk in.
+- *Close Friends*: your friends, each with a switch. On = they walk in.
   This is `close_friends` today; it just gets a page instead of a context action.
-- *Followers*: who may knock; remove someone here (unfollow both ways).
-- *Requests*: pending follow requests, accept/decline — moved out of the notch board
+- *Friends*: who may knock; removing someone removes access both ways.
+- *Requests*: pending friend requests, accept/decline — moved out of the notch board
   where it currently crowds the top row.
 - One sentence at the bottom, the only copy on the page: *Nobody can see whether
   you're home. Knocks aren't kept.*

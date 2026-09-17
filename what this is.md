@@ -20,13 +20,13 @@ Idle, it is almost nothing: a dark pill. It costs nothing to keep open. It asks 
 
 Hover or swipe down and it drops open into a strip: the hallway, your friends' doors. Not who's home. Nobody knows who's home.
 
-## Following
+## Friends
 
-Doors are found the way people are found on Instagram. Search a handle. Send a request. They accept, and now you follow them — which means you can walk over to their door and knock. They can follow you back, or not.
+Search a handle. Send a friend request. They accept once, and you can both knock on each other’s doors. Removing a friend removes access both ways.
 
 No invite codes. No links. No "add by phone number". A name and a request.
 
-Every door is private. Following is permission to knock. Nothing more.
+Every door is private. Friendship is permission to knock. Walk-in access is a separate choice each person makes.
 
 ## Knocking
 

@@ -5,6 +5,8 @@ import SwiftUI
 final class HallwayStore: ObservableObject {
     @Published private(set) var account: AccountState = .ready
     @Published private(set) var me: Profile?
+    /// Sign-in email, when the backend knows it. Nil on the mock.
+    @Published private(set) var email: String?
     @Published private(set) var doors: [Door] = []
     @Published private(set) var requests: [Profile] = []
     @Published private(set) var outgoing: Set<String> = []
@@ -31,7 +33,9 @@ final class HallwayStore: ObservableObject {
         refreshVersion += 1
         let version = refreshVersion
         let next = await backend.accountState()
+        let mail = await backend.accountEmail()
         guard version == refreshVersion, !isSigningOut else { return }
+        email = mail
         guard next == .ready else {
             account = next
             me = nil; doors = []; requests = []; outgoing = []
@@ -65,6 +69,21 @@ final class HallwayStore: ObservableObject {
         await refresh()
     }
 
+    func updateProfile(displayName: String) async throws {
+        try await backend.updateProfile(displayName: displayName)
+        await refresh()
+    }
+
+    func setAvatar(jpegOrPng: Data, contentType: String) async throws {
+        try await backend.setAvatar(jpegOrPng: jpegOrPng, contentType: contentType)
+        await refresh()
+    }
+
+    func clearAvatar() async throws {
+        try await backend.clearAvatar()
+        await refresh()
+    }
+
     func signOut() {
         guard !isSigningOut else { return }
         isSigningOut = true
@@ -92,7 +111,6 @@ final class HallwayStore: ObservableObject {
     func request(_ profile: Profile) { perform { try await $0.request(profile.id) } }
     func accept(_ profile: Profile) { perform { try await $0.accept(profile.id) } }
     func ignore(_ profile: Profile) { perform { try await $0.ignore(profile.id) } }
-    func removeFollower(_ profile: Profile) { perform { try await $0.removeFollower(profile.id) } }
     func unfollow(_ profile: Profile) { perform { try await $0.unfollow(profile.id) } }
     func setCloseFriend(_ profile: Profile, _ on: Bool) {
         perform { try await $0.setCloseFriend(profile.id, on) }
@@ -100,8 +118,7 @@ final class HallwayStore: ObservableObject {
 
     private func perform(_ op: @escaping @Sendable (any DoorbellBackend) async throws -> Void) {
         Task {
-            do { try await op(backend); problem = nil }
-            catch { problem = "Couldn’t save that. Try again." }
+            try? await op(backend)
             await refresh()
         }
     }

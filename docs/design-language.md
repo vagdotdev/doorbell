@@ -80,14 +80,15 @@ and the shell still reads as a space, remove it.
 
 What is allowed, all in `Atmosphere.swift`:
 
-- **Starfield.** Sparse, still, seeded. White only, most of it near invisible.
-  This is what makes the black a space rather than a fill.
-- **Doorstep.** Black glass whose crown sits `doorstepRise` above the floor;
-  the controls stand on it. Drawn with two things: a 1 pt hairline where the
-  light catches the rim, and a breath of the same light outside it, gone within
-  a few points. It fades from the crown down so the arc dissolves before it
-  meets the sides. `lit` (listening, a knock landing) lifts it a touch; that is
-  the only thing that moves.
+- **Starfield.** Sparse, seeded. White only, most of it near invisible. This is
+  what makes the black a space rather than a fill. Still on the shell. In the
+  room it drifts a point or two, slow enough that you only notice if you look.
+- **Doorstep.** On the door only — not the room window. Black glass whose crown
+  sits `doorstepRise` above the floor; the door controls stand on it. Drawn with
+  two things: a 1 pt hairline where the light catches the rim, and a breath of
+  the same light outside it, gone within a few points. It fades from the crown
+  down so the arc dissolves before it meets the sides. `lit` (listening, a knock
+  landing) lifts it a touch; that is the only thing that moves on the door.
 - **One light.** `horizon` is a barely-blue white, and it is the only colour
   the atmosphere has. Rims, halos, the doorstep — all the same light. The two
   accents (utility blue, social amber) stay on controls and never leak into the

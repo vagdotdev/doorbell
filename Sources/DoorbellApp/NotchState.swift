@@ -6,6 +6,9 @@ enum ShellMode: Equatable {
     case account
     /// Someone is at my door.
     case peephole(Profile)
+    /// Someone is at my door while I'm not to be disturbed: a face, nothing else.
+    /// `walkedIn` means they are already in my room, waiting for me to step in.
+    case pinhole(Profile, walkedIn: Bool)
     /// I'm at someone's door, knocking.
     case visiting(Door)
 
@@ -13,7 +16,7 @@ enum ShellMode: Equatable {
     var pins: Bool {
         switch self {
         case .hallway, .shelf: false
-        case .search, .requests, .settings, .account, .peephole, .visiting: true
+        case .search, .requests, .settings, .account, .peephole, .pinhole, .visiting: true
         }
     }
 
@@ -24,11 +27,16 @@ enum ShellMode: Equatable {
         default: false
         }
     }
+
+    var isPinhole: Bool {
+        if case .pinhole = self { return true }
+        return false
+    }
 }
 
-/// The three physical sizes the shell takes.
+/// The physical sizes the shell takes. `pinhole` is the notch grown by a few points.
 enum ShellKind: Equatable {
-    case compact, board, door
+    case compact, pinhole, board, door
 }
 
 /// Compact ↔ expanded, and what the expanded shell is showing.
@@ -51,6 +59,9 @@ final class NotchState: ObservableObject {
     @Published var bounce = false
 
     var isExpanded: Bool { kind != .compact }
+    /// The shell reads as an open card: rounded all round, hairline, shadow.
+    /// Compact and pinhole are the notch itself, only bigger.
+    var isOpen: Bool { kind == .board || kind == .door }
 
     var onKindChange: ((ShellKind) -> Void)?
     var onModeChange: ((ShellMode) -> Void)?
@@ -84,8 +95,11 @@ final class NotchState: ObservableObject {
 
     private func recompute() {
         let expanded = hoverSettled || mode.pins
-        let next: ShellKind = !expanded ? .compact : (mode.isDoor ? .door : .board)
+        let next: ShellKind = !expanded ? .compact : mode.isPinhole ? .pinhole : mode.isDoor ? .door : .board
         guard next != kind else { return }
-        withAnimation(next == .compact ? DesignTokens.springClose : DesignTokens.springOpen) { kind = next }
+        // The pinhole is not an event: it eases in, it does not spring.
+        let animation: Animation = next == .compact ? DesignTokens.springClose
+            : next == .pinhole ? .easeOut(duration: 0.5) : DesignTokens.springOpen
+        withAnimation(animation) { kind = next }
     }
 }

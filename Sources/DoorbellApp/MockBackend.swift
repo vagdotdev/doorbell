@@ -47,6 +47,31 @@ actor MockBackend: DoorbellBackend {
 
     // MARK: DoorbellBackend
 
+    func updateProfile(displayName: String) async throws {
+        let name = displayName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        graph.me.displayName = name
+        save()
+    }
+
+    func setAvatar(jpegOrPng: Data, contentType: String) async throws {
+        guard !jpegOrPng.isEmpty else { throw BackendError.badAvatar }
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Doorbell/mock", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let ext = contentType.contains("png") ? "png" : "jpg"
+        let file = dir.appendingPathComponent("avatar.\(ext)")
+        try jpegOrPng.write(to: file, options: .atomic)
+        graph.me.avatarURL = file
+        save()
+    }
+
+    func clearAvatar() async throws {
+        if let url = graph.me.avatarURL { try? FileManager.default.removeItem(at: url) }
+        graph.me.avatarURL = nil
+        save()
+    }
+
     func hallway() async throws -> HallwaySnapshot {
         let doors = graph.people
             .filter { graph.following[$0.id] == .accepted }
@@ -67,6 +92,7 @@ actor MockBackend: DoorbellBackend {
     }
 
     func request(_ id: Profile.ID) async throws {
+        guard graph.following[id] == nil else { return }
         graph.following[id] = .pending
         save()
         // Fake people are friendly: they accept after a moment.
@@ -77,17 +103,22 @@ actor MockBackend: DoorbellBackend {
     }
 
     func accept(_ id: Profile.ID) async throws {
+        guard graph.followers[id] != nil else { return }
         graph.followers[id] = .accepted
+        graph.following[id] = .accepted
         save()
     }
 
     func ignore(_ id: Profile.ID) async throws {
+        guard graph.followers[id] == .pending else { return }
         graph.followers.removeValue(forKey: id)
         save()
     }
 
     func unfollow(_ id: Profile.ID) async throws {
         graph.following.removeValue(forKey: id)
+        graph.followers.removeValue(forKey: id)
+        graph.closeFriends.remove(id)
         save()
     }
 
@@ -114,6 +145,7 @@ actor MockBackend: DoorbellBackend {
     private func autoAccept(_ id: Profile.ID) {
         guard graph.following[id] == .pending else { return }
         graph.following[id] = .accepted
+        graph.followers[id] = .accepted
         save()
     }
 
@@ -138,7 +170,7 @@ actor MockBackend: DoorbellBackend {
             me: p("vagdev", "Vagdev"),
             people: people,
             following: ["arjun": .accepted, "priya": .accepted, "rohan": .accepted, "kabir": .pending],
-            followers: ["arjun": .accepted, "priya": .accepted, "ananya": .pending],
+            followers: ["arjun": .accepted, "priya": .accepted, "rohan": .accepted, "ananya": .pending],
             closeFriends: ["arjun"]
         )
     }

@@ -18,7 +18,9 @@ final class NotchPanel: NSPanel {
 
     init() {
         let config = AppConfig.current
-        if config.useSupabase, let url = config.supabaseURL, let key = config.supabaseAnonKey {
+        if config.useConvex, let url = config.convexURL {
+            backend = ConvexBackend(url: url, config: config)
+        } else if config.useSupabase, let url = config.supabaseURL, let key = config.supabaseAnonKey {
             backend = SupabaseBackend(url: url, anonKey: key, config: config)
         } else {
             backend = MockBackend()
@@ -71,8 +73,11 @@ final class NotchPanel: NSPanel {
         }
 
         // A pinned shell (search, settings…) lets go when you click anywhere else.
-        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.state.unpin() }
+        // Not while a snapshot is being taken: whoever asked for it is still typing.
+        if ProcessInfo.processInfo.environment["DOORBELL_SNAPSHOT"] == nil {
+            clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.state.unpin() }
+            }
         }
         // Hover, from the pointer's position against the window — the one thing that
         // reports reliably while some other app is frontmost. Global covers other apps'
@@ -112,10 +117,19 @@ final class NotchPanel: NSPanel {
             Task { @MainActor [weak self] in try? await self?.hallway.signIn(email: email, password: password) }
         }
         if let mode = env["DOORBELL_START_MODE"] {
+            // Board modes wait for the account to settle, which otherwise lands on the hallway.
+            func once(_ target: ShellMode) {
+                Task { @MainActor [weak self] in
+                    for _ in 0..<40 where self?.hallway.account != .ready {
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
+                    self?.state.mode = target
+                }
+            }
             switch mode {
-            case "search": state.mode = .search
-            case "requests": state.mode = .requests
-            case "settings": state.mode = .settings
+            case "search": once(.search)
+            case "requests": once(.requests)
+            case "settings": once(.settings)
             case "shelf": state.mode = .shelf; state.isHovering = true
             case let v where v.hasPrefix("visit:"):
                 let handle = String(v.dropFirst(6))
@@ -140,11 +154,12 @@ final class NotchPanel: NSPanel {
     private func resize(to kind: ShellKind) {
         let target = geometry.rect(for: geometry.frameSize(for: kind))
         // Closing is critically damped and lands on the notch; no room needed there.
-        let room = kind == .compact ? 0 : DesignTokens.overshootRoom
+        let open = kind == .board || kind == .door
+        let room = open ? DesignTokens.overshootRoom : 0
         let roomy = NSRect(x: target.minX - room, y: target.minY - room,
                            width: target.width + 2 * room, height: target.height + room)
         settleTask?.cancel()
-        hasShadow = kind != .compact
+        hasShadow = open
         setFrame(frame.union(roomy), display: true)
         settleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: DesignTokens.springSettle)

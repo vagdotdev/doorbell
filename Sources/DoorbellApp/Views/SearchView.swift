@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Find a door by handle and ask to follow.
+/// Find a friend by handle and send a request.
 struct SearchView: View {
     @EnvironmentObject private var hallway: HallwayStore
     @State private var query = ""
@@ -72,13 +72,17 @@ struct SearchView: View {
     private func trailing(for person: Profile) -> some View {
         switch hallway.relationship(to: person) {
         case .none:
-            PillButton(title: "Follow", prominent: true) { hallway.request(person) }
+            if hallway.requests.contains(where: { $0.id == person.id }) {
+                PillButton(title: "Accept", prominent: true) { hallway.accept(person) }
+            } else {
+                PillButton(title: "Add Friend", prominent: true) { hallway.request(person) }
+            }
         case .requested:
             Text("Requested")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(DesignTokens.inkTertiary)
         case .following:
-            Text("Following")
+            Text("Friends")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(DesignTokens.inkSecondary)
         }

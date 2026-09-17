@@ -10,9 +10,17 @@ protocol DoorbellBackend: Sendable {
 
     // Account
     func accountState() async -> AccountState
+    /// Sign-in email when known (Convex Auth). Nil on the mock.
+    func accountEmail() async -> String?
     func signIn(email: String, password: String) async throws
     func signUp(email: String, password: String) async throws
     func claimHandle(_ handle: String, displayName: String) async throws
+    /// Change the name friends see.
+    func updateProfile(displayName: String) async throws
+    /// Upload a JPEG/PNG as the profile photo. Empty data is refused by the backend.
+    func setAvatar(jpegOrPng: Data, contentType: String) async throws
+    /// Drop the profile photo.
+    func clearAvatar() async throws
     func signOut() async
 
     // Graph
@@ -47,9 +55,13 @@ extension DoorbellBackend {
     func removeFollower(_ id: Profile.ID) async throws { try await ignore(id) }
     func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {}
     func accountState() async -> AccountState { .ready }
+    func accountEmail() async -> String? { nil }
     func signIn(email: String, password: String) async throws {}
     func signUp(email: String, password: String) async throws {}
     func claimHandle(_ handle: String, displayName: String) async throws {}
+    func updateProfile(displayName: String) async throws {}
+    func setAvatar(jpegOrPng: Data, contentType: String) async throws {}
+    func clearAvatar() async throws {}
     func signOut() async {}
     func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant? { nil }
     func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws {}

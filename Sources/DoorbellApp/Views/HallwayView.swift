@@ -72,13 +72,13 @@ private struct DoorCard: View {
             ))
             .disabled(!door.followsMe)
             if !door.followsMe {
-                Text("Available when they follow you")
+                Text("Available once you're friends")
             }
             if door.followsMe {
                 Button("Remove Follower", role: .destructive) { hallway.removeFollower(door.profile) }
             }
             Divider()
-            Button("Unfollow @\(door.profile.handle)", role: .destructive) {
+            Button("Remove Friend", role: .destructive) {
                 hallway.unfollow(door.profile)
             }
             #if DEBUG

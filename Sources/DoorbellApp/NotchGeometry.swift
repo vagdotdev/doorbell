@@ -44,10 +44,16 @@ struct NotchGeometry {
         CGSize(width: DesignTokens.expandedWidth, height: notchHeight + DesignTokens.doorBodyHeight)
     }
 
+    /// Do not disturb: the notch grown by a few points, a face in the extra room.
+    var pinholeSize: CGSize {
+        CGSize(width: notchWidth, height: notchHeight + DesignTokens.pinholeBodyHeight)
+    }
+
     /// The body: where content is laid out.
     func size(for kind: ShellKind) -> CGSize {
         switch kind {
         case .compact: compactSize
+        case .pinhole: pinholeSize
         case .board: boardSize
         case .door: doorSize
         }

@@ -144,6 +144,7 @@ final class DoorController: ObservableObject {
     func openDoor(automatically: Bool = false) {
         guard let arrival = arrivals.first, hallway.me != nil, !isAdmitting, !shuttingDown, !isLeaving else { return }
         guard visiting == nil else { problem = "Leave the doorstep before letting someone in."; return }
+        Sounds.stopKnock()
         arrivalTask?.cancel()
         guard !automatically || !quiet else { return }
         isAdmitting = true
@@ -184,12 +185,14 @@ final class DoorController: ObservableObject {
 
     func toggleListening() {
         listening.toggle()
+        if listening { Sounds.stopKnock() }
         peep.volumeScale = listening ? 1 : ((quiet || room.isActive) ? 0 : 1)
         if !room.isActive { IncomingAudio.shared.setListening(listening) }
         if listening, !peep.isConnected { showCurrentArrival() }
     }
     func dismissPeephole(stopAudio: Bool = true) {
         guard !isAdmitting, let id = arrivals.first?.id else { return }
+        Sounds.stopKnock()
         removeArrival(id)
     }
     private func removeArrival(_ id: UUID) {
@@ -203,7 +206,7 @@ final class DoorController: ObservableObject {
             showCurrentArrival()
         }
     }
-    private func showCurrentArrival() {
+    private func showCurrentArrival(handoff: Bool = false) {
         guard let arrival = arrivals.first else {
             if case .peephole = state.mode { state.mode = .hallway }
             if !room.isActive { IncomingAudio.shared.depart() }
@@ -212,6 +215,7 @@ final class DoorController: ObservableObject {
         state.mode = .peephole(arrival.profile)
         peep.volumeScale = listening ? 1 : ((quiet || room.isActive) ? 0 : 1)
         guard !quiet || listening else { return }
+        let knockedAt = ContinuousClock.now
         arrivalTask?.cancel()
         arrivalTask = Task { [weak self] in
             guard let self else { return }
@@ -224,6 +228,10 @@ final class DoorController: ObservableObject {
                 if let grant { try await peep.connect(grant, microphone: false, camera: false) }
                 try Task.checkCancellation()
                 guard arrivals.first?.id == arrival.id else { return }
+                if handoff {
+                    try? await Task.sleep(until: knockedAt + .seconds(Sounds.knockHandoff), clock: .continuous)
+                    guard !Task.isCancelled, arrivals.first?.id == arrival.id else { return }
+                }
                 if !room.isActive { IncomingAudio.shared.arrive(muffled: !listening) }
             } catch {
                 guard !Task.isCancelled, arrivals.first?.id == arrival.id else { return }
@@ -242,8 +250,14 @@ final class DoorController: ObservableObject {
         }
         guard arrivals.first?.id == id else { return }
         if walkIn, !quiet, !room.isActive, visiting == nil { openDoor(automatically: true); return }
-        if !quiet { state.knockBounce(); Sounds.knock() }
-        showCurrentArrival()
+        let rang: Bool
+        if !quiet {
+            state.knockBounce()
+            rang = Sounds.knock()
+        } else {
+            rang = false
+        }
+        showCurrentArrival(handoff: rang)
     }
     private func handle(_ event: DoorEvent) {
         switch event {

@@ -14,6 +14,7 @@ solo; the social layer (knocks, walk-ins, shouts) turns on when friends join.
 - `docs/plan.md` — phased build plan with a check per phase
 - `docs/design-language.md` — NotchNook × DynamicLake design study + tokens rationale
 - `Sources/DoorbellApp/` — native SwiftUI + AppKit notch app (macOS 15+)
+- `convex/` — Convex backend (accounts, graph, door events). See `docs/convex.md`.
 - `research/notch-apps/` — 39 competitor screenshots + `SOURCES.md`
 
 ## Build & run
@@ -21,6 +22,20 @@ solo; the social layer (knocks, walk-ins, shouts) turns on when friends join.
 ```sh
 swift build   # verify compile
 swift run     # run the shell (agent app: notch panel only, no dock icon)
+```
+
+### Install (one command)
+
+Builds a signed `.app`, puts it in `/Applications`, clears Gatekeeper quarantine, and opens it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/vagdotdev/doorbell/main/scripts/install.sh | zsh
+```
+
+Already have a clone? `scripts/install.sh`. Already have a downloaded app?
+
+```sh
+xattr -cr /Applications/Doorbell.app && open /Applications/Doorbell.app
 ```
 
 Dev hooks (hover can't be scripted without Accessibility rights):
@@ -37,7 +52,33 @@ DOORBELL_AUTO_OPEN=5                           # real backend: answer the next k
 
 Without a `.env` the app runs on the mock hallway: fake friends, fake knocks, no network.
 
-### Real backend, locally
+### Real backend, locally (Convex)
+
+Convex runs on this Mac as an anonymous local deployment; no account needed until you deploy.
+LiveKit's dev server does media.
+
+```sh
+npm install
+livekit-server --dev --bind 127.0.0.1          # media; keep it running
+npm run dev                                    # local deployment; writes CONVEX_URL to .env.local; keep it running
+node scripts/convex-auth-keys.mjs              # once: signing keys for Convex Auth
+npx convex env set LIVEKIT_URL=ws://127.0.0.1:7880 LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret
+scripts/seed-convex.sh                         # alice + bob (mutual follow), carol (bob is on her close list)
+echo DOORBELL_BACKEND=convex >> .env
+scripts/bundle.sh debug                        # → build/Doorbell.app (a bundle keeps camera/mic permission)
+open build/Doorbell.app
+```
+
+Sign in as `alice@test.local` / `password123`. Second door on the same Mac:
+`open -n build/Doorbell.app --env DOORBELL_PROFILE=bob`.
+
+Backend tests: `npx vitest run` (convex-test, no deployment needed) and `npx tsc --noEmit`.
+
+Cloud: `npx convex login`, `npx convex deploy`, then `node scripts/convex-auth-keys.mjs --prod` and
+`npx convex env set --prod LIVEKIT_URL=… LIVEKIT_API_KEY=… LIVEKIT_API_SECRET=…`. Point
+`CONVEX_URL` in `.env` at the production URL. Details: `docs/convex.md`.
+
+### Old backend, locally (Supabase — still works)
 
 Everything runs on this Mac: Supabase in Docker (via Colima), LiveKit's dev server, and the
 `door-token` function.
@@ -64,6 +105,13 @@ open -n build/Doorbell.app --env DOORBELL_PROFILE=bob   # separate session; sign
 Launch through `open`, not from a shell running inside an agent or sandbox — those can't reach
 the camera and LiveKit will time out publishing video.
 
+Handing the bundle to someone: it is ad-hoc signed, not notarized, so Gatekeeper will refuse it
+once downloaded. They clear the quarantine flag and it opens:
+
+```sh
+xattr -cr /Applications/Doorbell.app
+```
+
 Cloud: `supabase link` + `supabase db push` + `supabase functions deploy door-token`, then
 `supabase secrets set LIVEKIT_URL=… LIVEKIT_API_KEY=… LIVEKIT_API_SECRET=…` and point `.env`
 at the project.
@@ -78,7 +126,7 @@ See `docs/plan.md`. Short version:
 1. ✅ Hallway on a mock backend — doors, search, requests, close friends, settings
 2. ✅ Knock + peephole (both glass styles), visiting, walk-in → room, simulated locally
 3. 🔨 Real media — LiveKit seats, real tracks in peephole and room (screen/window picker, devices and error states implemented; two-Mac proof pending)
-4. 🔨 Real backend — Supabase auth, follow graph, token function, realtime knocks; end to end on the local stack
+4. ✅ Real backend — Convex auth, follow graph, token action, live knocks; end to end on the local deployment (Supabase stack still in repo)
 5. Utilities — scratch, Now Playing, mail slot, shouts
 6. Do not disturb — Focus + meeting detection, pinhole mode
 7. Ship — design pass, sound, signing, updates, battery

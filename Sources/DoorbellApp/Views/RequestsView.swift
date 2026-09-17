@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// People asking to follow you — that is, asking to be allowed to knock.
+/// Accept once so both friends can knock on each other's door.
 struct RequestsView: View {
     @EnvironmentObject private var hallway: HallwayStore
 

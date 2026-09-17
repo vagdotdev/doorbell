@@ -7,6 +7,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.55.0"),
         .package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.17.0"),
+        .package(url: "https://github.com/get-convex/convex-swift.git", from: "0.8.1"),
     ],
     targets: [
         .executableTarget(
@@ -14,11 +15,12 @@ let package = Package(
             dependencies: [
                 .product(name: "Supabase", package: "supabase-swift"),
                 .product(name: "LiveKit", package: "client-sdk-swift"),
+                .product(name: "ConvexMobile", package: "convex-swift"),
             ],
             path: "Sources/DoorbellApp",
             exclude: ["Info.plist"],
             // `.copy` keeps Assets/Portraits/ as a folder; `.process` would flatten it.
-            resources: [.copy("Assets/Portraits")],
+            resources: [.copy("Assets/Portraits"), .copy("Assets/Sounds")],
             linkerSettings: [
                 // Embed Info.plist so TCC has usage strings for camera/mic while we
                 // run as a bare executable. An .app bundle replaces this later.

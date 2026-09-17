@@ -38,7 +38,7 @@ private struct SignInForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Your door")
+            Text("Sign in")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(DesignTokens.ink)
             HStack(spacing: 8) {
@@ -96,7 +96,7 @@ private struct HandleForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Put a name on the door")
+            Text("Your name and handle")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(DesignTokens.ink)
             HStack(spacing: 8) {

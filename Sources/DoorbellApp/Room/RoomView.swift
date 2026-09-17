@@ -60,12 +60,12 @@ private struct AtTheDoor: View {
     var body: some View {
         HStack(spacing: 10) {
             AvatarView(profile: visitor, size: 24)
-            Text("\(visitor.displayName) is at the door")
+            Text("\(visitor.displayName) is knocking")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(DesignTokens.ink)
                 .lineLimit(1)
             PillButton(title: "Not Now") { door.dismissPeephole() }.disabled(door.isAdmitting)
-            PillButton(title: door.isAdmitting ? "Opening…" : "Let In", prominent: true) { door.openDoor() }.disabled(door.isAdmitting)
+            PillButton(title: door.isAdmitting ? "Opening…" : "Accept", prominent: true) { door.openDoor() }.disabled(door.isAdmitting)
         }
         .padding(.leading, 8)
         .padding(.trailing, 6)
@@ -75,19 +75,13 @@ private struct AtTheDoor: View {
     }
 }
 
-/// Black with a floor: the light pools low and behind the tiles, the way a dark
-/// room is lit from one lamp, and the dust gives the black depth.
+/// Pitch black. Dust only — no floor, no glass. The stars drift a point or two,
+/// slow enough that they read as nothing until you look.
 private struct RoomBackdrop: View {
     var body: some View {
         ZStack {
             Color.black
-            RadialGradient(
-                colors: [DesignTokens.roomFloor, .black],
-                center: .init(x: 0.5, y: 0.62), startRadius: 0, endRadius: 720
-            )
-            Starfield(intensity: 0.8, seed: 5)
-            Doorstep(rise: 118)
-                .opacity(0.7)
+            Starfield(intensity: 0.4, seed: 5, drift: 1.4)
         }
         .ignoresSafeArea()
     }
@@ -150,7 +144,7 @@ private struct ParticipantTile: View {
             shape.fill(Color(white: 0.09))
             if let track = participant.video, participant.camOn || !participant.isLocal {
                 LiveVideo(track: track, mirrored: participant.isLocal)
-            } else if participant.camOn && participant.isLocal && !AppConfig.current.useSupabase {
+            } else if participant.camOn && participant.isLocal && !AppConfig.current.isLive {
                 // Mock: no seat, so the local camera stands in.
                 CameraPreview(mirrored: true, fallback: participant.profile)
             } else {

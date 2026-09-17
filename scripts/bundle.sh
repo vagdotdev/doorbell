@@ -29,6 +29,8 @@ for fw in "$BIN"/*.framework; do
 done
 # Only public client configuration is bundled. Debug alone allows local services.
 cp build/client.env "$APP/Contents/Resources/.env"
+# `npx convex dev` keeps CONVEX_URL in .env.local.
+[ -f .env.local ] && cp .env.local "$APP/Contents/Resources/.env.local"
 
 # Info.plist: the source of truth, plus the keys only a bundle needs.
 cp Sources/DoorbellApp/Info.plist "$APP/Contents/Info.plist"

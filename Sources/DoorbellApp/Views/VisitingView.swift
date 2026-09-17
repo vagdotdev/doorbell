@@ -16,7 +16,7 @@ struct VisitingView: View {
 
     var body: some View {
         DoorFrame(geometry: geometry) {
-            DoorTitle(name: "\(firstName)’s door") {
+            DoorTitle(name: firstName) {
                 HStack(spacing: 6) {
                     KnockingDots()
                     Text(media.phase == .connecting ? "Connecting…" : (media.problem ?? "Your camera and mic are live when enabled"))
@@ -26,7 +26,7 @@ struct VisitingView: View {
             DoorGlass(style: style) {
                 if let track = media.localVideo {
                     LiveVideo(track: track, mirrored: true)
-                } else if AppConfig.current.useSupabase {
+                } else if AppConfig.current.isLive {
                     // The seat's own capturer owns the camera; a preview would fight it.
                     Color(white: 0.08)
                 } else {

@@ -11,7 +11,7 @@ struct DoorShellView: View {
     private var frameSize: CGSize { geometry.frameSize(for: state.kind) }
 
     private var shape: NotchShape {
-        state.isExpanded
+        state.isOpen
             ? NotchShape(topRadius: DesignTokens.shellRadius, bottomRadius: DesignTokens.shellRadius)
             : NotchShape(topRadius: 0, bottomRadius: DesignTokens.compactRadius)
     }
@@ -21,8 +21,8 @@ struct DoorShellView: View {
             shape.fill(.black)
             // Glass, used once: a top-lit hairline down the sides. Stroked at 2pt and
             // clipped by the silhouette, so exactly 1pt sits inside the edge. Only once
-            // open — at rest the shell is the notch and nothing else.
-            if state.isExpanded {
+            // open — at rest (and as a pinhole) the shell is the notch and nothing else.
+            if state.isOpen {
                 shape.stroke(
                     LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.03)],
                                    startPoint: .top, endPoint: .bottom),
@@ -31,6 +31,7 @@ struct DoorShellView: View {
             }
             switch state.kind {
             case .compact: EmptyView()
+            case .pinhole: pinholeContent.transition(.opacity.animation(.easeOut(duration: 0.4).delay(0.2)))
             case .board: boardContent.transition(.shellContent)
             case .door: doorContent.transition(.shellContent)
             }
@@ -66,6 +67,13 @@ struct DoorShellView: View {
                 .background(Starfield(intensity: 0.55, seed: 11))
         }
         .frame(width: s.width, height: s.height)
+    }
+
+    @ViewBuilder
+    private var pinholeContent: some View {
+        if case .pinhole(let visitor, _) = state.mode {
+            PinholeView(visitor: visitor, geometry: geometry, peep: controller.peep)
+        }
     }
 
     @ViewBuilder
@@ -127,7 +135,8 @@ private struct KnockBounce: ViewModifier {
     }
 }
 
-/// Menu-bar-height row: tabs left of the physical notch, tools right of it.
+/// Doorbell is both the app name and home tab; settings sits beside it, spelled out.
+/// Shelf and search stay on the right.
 private struct TopRow: View {
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var hallway: HallwayStore
@@ -138,19 +147,21 @@ private struct TopRow: View {
                 Spacer()   // nothing to say up here until there is a hallway
             } else {
                 HStack(spacing: 4) {
-                    TabPill(title: "Hallway", symbol: "door.left.hand.open",
-                            selected: state.mode != .shelf) { state.mode = .hallway }
-                    TabPill(title: "Shelf", symbol: "tray",
-                            selected: state.mode == .shelf) { state.mode = .shelf }
+                    TabPill(title: "Doorbell", symbol: nil,
+                            selected: state.mode != .shelf && state.mode != .settings) { state.mode = .hallway }
+                    TabPill(title: "Open settings", symbol: "gearshape",
+                            selected: state.mode == .settings) {
+                        state.mode = state.mode == .settings ? .hallway : .settings
+                    }
                 }
                 Spacer()
-                HStack(spacing: 2) {
+                HStack(spacing: 4) {
+                    TabPill(title: "Shelf", symbol: "tray",
+                            selected: state.mode == .shelf) { state.mode = .shelf }
                     ToolButton(symbol: "magnifyingglass", active: state.mode == .search) {
                         state.mode = state.mode == .search ? .hallway : .search
                     }
-                    ToolButton(symbol: "gearshape", active: state.mode == .settings) {
-                        state.mode = state.mode == .settings ? .hallway : .settings
-                    }
+                    .help("Find friends")
                 }
             }
         }
@@ -159,27 +170,47 @@ private struct TopRow: View {
 
 private struct TabPill: View {
     let title: String
-    let symbol: String
+    let symbol: String?
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            // The label shows on the selected tab only, so both fit beside the notch.
             HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-                if selected {
-                    Text(title).font(.system(size: 12, weight: .medium))
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
+                } else {
+                    PeepholeMark()
                 }
+                Text(title).font(.system(size: 12, weight: .medium))
             }
+            .fixedSize()
             .foregroundStyle(selected ? DesignTokens.ink : DesignTokens.inkSecondary)
-            .padding(.horizontal, selected ? 10 : 9)
+            .padding(.horizontal, 8)
             .frame(height: 22)
             .background(
                 Capsule().fill(selected ? DesignTokens.raised : .clear)
             )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// A dark lens and a thin rim: the same peephole as the door, at tab size.
+private struct PeepholeMark: View {
+    var body: some View {
+        Circle()
+            .fill(.black)
+            .overlay(Circle().strokeBorder(.primary.opacity(0.8), lineWidth: 1))
+            .overlay(Circle().strokeBorder(.primary.opacity(0.25), lineWidth: 0.5).padding(3))
+            .overlay(alignment: .topLeading) {
+                Circle().fill(.primary.opacity(0.8))
+                    .frame(width: 2, height: 2)
+                    .offset(x: 3, y: 3)
+            }
+            .frame(width: 13, height: 13)
+            .accessibilityHidden(true)
     }
 }
 
@@ -220,7 +251,7 @@ private struct ShellBody: View {
             case .requests: RequestsView()
             case .settings: SettingsView()
             case .account: HallwayView()
-            case .peephole, .visiting: EmptyView()   // door modes render in the door shell
+            case .peephole, .pinhole, .visiting: EmptyView()   // door modes render in their own shells
             }
             }
         }

@@ -1,16 +1,27 @@
 import SwiftUI
 
-/// Depth for black surfaces. Two pieces, both still: a sparse dust of stars so the
-/// black is a space rather than a fill, and a doorstep — a soft glass dome rising
-/// from the bottom edge that the controls stand on. Neither animates; idle Doorbell
-/// costs nothing.
+/// Depth for black surfaces. A sparse dust of stars so the black is a space rather
+/// than a fill, and — on the door — a doorstep, the glass dome the controls stand on.
+/// The door and the board stay still. The room may drift a point or two.
 
 struct Starfield: View {
     /// Overall strength. The board runs it lower than the door and the room.
     var intensity: Double = 1
     var seed: UInt64 = 7
+    /// How far a star may wander, in points. Zero (the default) is still.
+    var drift: CGFloat = 0
 
     var body: some View {
+        if drift > 0 {
+            TimelineView(.animation(minimumInterval: 1.0 / 8.0)) { timeline in
+                field(at: timeline.date.timeIntervalSinceReferenceDate)
+            }
+        } else {
+            field(at: 0)
+        }
+    }
+
+    private func field(at t: TimeInterval) -> some View {
         Canvas(opaque: false, rendersAsynchronously: true) { ctx, size in
             var rng = SplitMix(seed: seed)
             let count = Int(size.width * size.height / 2800)
@@ -21,8 +32,20 @@ struct Starfield: View {
                 let y = rng.unit() * size.height
                 let r = 0.32 + rng.unit() * 0.42
                 let a = (0.03 + pow(rng.unit(), 2.6) * 0.14) * intensity
+                let dx: CGFloat
+                let dy: CGFloat
+                if drift > 0 {
+                    let phase = rng.unit() * .pi * 2
+                    let period = 52 + rng.unit() * 40
+                    let theta = t * (2 * .pi / period) + phase
+                    dx = cos(theta) * drift
+                    dy = sin(theta * 0.73) * drift * 0.55
+                } else {
+                    dx = 0
+                    dy = 0
+                }
                 specs.append((
-                    CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2),
+                    CGRect(x: x + dx - r, y: y + dy - r, width: r * 2, height: r * 2),
                     a,
                     r * r * a
                 ))

@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Initials on a duotone disc until real avatars arrive. Colour is stable per handle.
+/// Initials on a duotone disc until a photo is set. Colour is stable per handle.
+/// Remote `avatarURL` (Convex storage) and local mock portraits both show.
 struct AvatarView: View {
     let profile: Profile
     var size: CGFloat = 44
@@ -37,24 +38,44 @@ struct AvatarView: View {
         return NSImage(contentsOf: url)
     }
 
+    private var filePortrait: NSImage? {
+        guard let url = profile.avatarURL, url.isFileURL else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
     var body: some View {
         ZStack {
-            if let localPortrait {
-                Image(nsImage: localPortrait)
-                    .resizable()
-                    .scaledToFill()
+            if let filePortrait {
+                Image(nsImage: filePortrait).resizable().scaledToFill()
+            } else if let remote = profile.avatarURL, !remote.isFileURL {
+                AsyncImage(url: remote) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        initialsDisc
+                    }
+                }
+            } else if let localPortrait {
+                Image(nsImage: localPortrait).resizable().scaledToFill()
             } else {
-                Circle().fill(
-                    LinearGradient(colors: [palette.0, palette.1],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                Text(initials)
-                    .font(.system(size: size * 0.36, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.95))
+                initialsDisc
             }
             Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1)
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+    }
+
+    private var initialsDisc: some View {
+        ZStack {
+            Circle().fill(
+                LinearGradient(colors: [palette.0, palette.1],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            Text(initials)
+                .font(.system(size: size * 0.36, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.95))
+        }
     }
 }

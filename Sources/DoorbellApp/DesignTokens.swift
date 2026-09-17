@@ -11,9 +11,13 @@ enum DesignTokens {
     // One expanded width for everything; only the height breathes.
     static let expandedWidth: CGFloat = 480
     /// Below the notch row. The shell is this plus the notch height.
-    static let boardBodyHeight: CGFloat = 184
+    /// Tall enough for Settings → Profile + prefs without feeling cramped.
+    static let boardBodyHeight: CGFloat = 248
     /// The door card: name, the glass as the hero, a row of round controls.
     static let doorBodyHeight: CGFloat = 296
+    /// Do not disturb: how far the notch grows to fit one small face. Two rooms away.
+    static let pinholeBodyHeight: CGFloat = 34
+    static let pinholeFace: CGFloat = 24
     /// Eyehole diameter; the rectangle is 16:9 of this.
     static let glassHeight: CGFloat = 174
     static let glassRadius: CGFloat = 16
@@ -21,7 +25,8 @@ enum DesignTokens {
     /// A friend's voice through the door, before you choose to listen.
     static let doorVolume: Float = 0.25
     /// Raised-cosine fades for incoming voice. Long enough to feel, short enough to vanish.
-    static let audioArrive: TimeInterval = 0.56
+    /// Arrival is slow on purpose: it rises under the tail of the knock tone.
+    static let audioArrive: TimeInterval = 0.9
     static let audioListen: TimeInterval = 0.40
     static let audioEnter: TimeInterval = 0.48
     static let audioDepart: TimeInterval = 0.34

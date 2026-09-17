@@ -5,7 +5,9 @@ xcuserdata/
 DerivedData/
 .DS_Store
 .env
+.env.local
+node_modules/
+.convex/
 supabase/.temp/
 build/
-
 .park/

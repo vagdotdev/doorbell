@@ -72,6 +72,27 @@ actor SupabaseBackend: DoorbellBackend {
         updatesOut.yield()
     }
 
+    func accountEmail() async -> String? {
+        try? await client.auth.session.user.email
+    }
+
+    func updateProfile(displayName: String) async throws {
+        let name = displayName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, let id = me?.id else { throw BackendError.noProfile }
+        try await client.from("profiles").update(["display_name": name]).eq("id", value: id).execute()
+        me?.displayName = name
+        updatesOut.yield()
+    }
+
+    func setAvatar(jpegOrPng: Data, contentType: String) async throws {
+        // Photos live on Convex. The Supabase stack stays name-only until it is removed.
+        throw BackendError.badAvatar
+    }
+
+    func clearAvatar() async throws {
+        throw BackendError.badAvatar
+    }
+
     func signOut() async {
         signingOut = true; sessionVersion += 1
         me = nil; known = [:]
@@ -167,16 +188,15 @@ actor SupabaseBackend: DoorbellBackend {
     }
 
     func accept(_ id: Profile.ID) async throws {
-        guard let me else { throw BackendError.noProfile }
-        try await client.from("follows").update(["status": "accepted"])
-            .eq("follower_id", value: id).eq("followee_id", value: me.id).execute()
+        try await client.rpc("accept_friend", params: ["p_profile_id": id]).execute()
         updatesOut.yield()
     }
 
     func ignore(_ id: Profile.ID) async throws {
         guard let me else { throw BackendError.noProfile }
         try await client.from("follows").delete()
-            .eq("follower_id", value: id).eq("followee_id", value: me.id).execute()
+            .eq("follower_id", value: id).eq("followee_id", value: me.id)
+            .eq("status", value: "pending").execute()
         updatesOut.yield()
     }
 
@@ -186,9 +206,7 @@ actor SupabaseBackend: DoorbellBackend {
         updatesOut.yield()
     }
     func unfollow(_ id: Profile.ID) async throws {
-        guard let me else { throw BackendError.noProfile }
-        try await client.from("follows").delete()
-            .eq("follower_id", value: me.id).eq("followee_id", value: id).execute()
+        try await client.rpc("remove_friend", params: ["p_profile_id": id]).execute()
         updatesOut.yield()
     }
 
@@ -324,7 +342,7 @@ actor SupabaseBackend: DoorbellBackend {
 }
 
 enum BackendError: Error {
-    case noProfile, noSuchDoor
+    case noProfile, noSuchDoor, badAvatar
 }
 
 // MARK: - Rows
