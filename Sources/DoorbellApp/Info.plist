@@ -8,11 +8,22 @@
 	<string>Doorbell</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.1</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.vag.doorbell.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>doorbell</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSUIElement</key>
+	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Friends see you when you knock on their door, and in the room.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Friends hear you when you knock on their door, and in the room.</string>
-	<key>LSUIElement</key>
-	<true/>
 </dict>
 </plist>

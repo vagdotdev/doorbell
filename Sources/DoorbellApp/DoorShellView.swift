@@ -19,6 +19,13 @@ struct DoorShellView: View {
     var body: some View {
         ZStack(alignment: .top) {
             shape.fill(.black)
+                // The same dust as everywhere else, faint, on the shell in every state. Drawn
+                // at one fixed size (an overlay, so it never sizes the shell) so the stars
+                // hold still while the silhouette animates around them.
+                .overlay(alignment: .top) {
+                    Starfield(intensity: 0.55, seed: 11)
+                        .frame(width: geometry.boardSize.width, height: geometry.doorSize.height)
+                }
             // Glass, used once: a top-lit hairline down the sides. Stroked at 2pt and
             // clipped by the silhouette, so exactly 1pt sits inside the edge. Only once
             // open — at rest the shell is the notch and nothing else.
@@ -63,7 +70,6 @@ struct DoorShellView: View {
                 .frame(height: geometry.notchHeight)
                 .padding(.horizontal, 14)
             ShellBody()
-                .background(Starfield(intensity: 0.55, seed: 11))
         }
         .frame(width: s.width, height: s.height)
     }
@@ -135,13 +141,11 @@ private struct TopRow: View {
     var body: some View {
         HStack(spacing: 0) {
             if hallway.account != .ready {
-                Spacer()   // nothing to say up here until there is a hallway
+                Spacer()   // nothing to say up here until you're signed in
             } else {
                 HStack(spacing: 4) {
-                    TabPill(title: "Hallway", symbol: "door.left.hand.open",
-                            selected: state.mode != .shelf) { state.mode = .hallway }
-                    TabPill(title: "Shelf", symbol: "tray",
-                            selected: state.mode == .shelf) { state.mode = .shelf }
+                    TabPill(title: "Friends", selected: state.mode != .shelf) { state.mode = .hallway }
+                    TabPill(title: "Shelf", selected: state.mode == .shelf) { state.mode = .shelf }
                 }
                 Spacer()
                 HStack(spacing: 2) {
@@ -149,7 +153,7 @@ private struct TopRow: View {
                         state.mode = state.mode == .search ? .hallway : .search
                     }
                     ToolButton(symbol: "gearshape", active: state.mode == .settings) {
-                        state.mode = state.mode == .settings ? .hallway : .settings
+                        hallway.openWindow?()
                     }
                 }
             }
@@ -157,29 +161,24 @@ private struct TopRow: View {
     }
 }
 
+/// A word, not a glyph. Both tabs fit beside the notch at this size.
 private struct TabPill: View {
     let title: String
-    let symbol: String
     let selected: Bool
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            // The label shows on the selected tab only, so both fit beside the notch.
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-                if selected {
-                    Text(title).font(.system(size: 12, weight: .medium))
-                }
-            }
-            .foregroundStyle(selected ? DesignTokens.ink : DesignTokens.inkSecondary)
-            .padding(.horizontal, selected ? 10 : 9)
-            .frame(height: 22)
-            .background(
-                Capsule().fill(selected ? DesignTokens.raised : .clear)
-            )
+            Text(title)
+                .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                .foregroundStyle(selected ? DesignTokens.ink : (hovering ? DesignTokens.ink : DesignTokens.inkSecondary))
+                .padding(.horizontal, 10)
+                .frame(height: 22)
+                .background(Capsule().fill(selected ? DesignTokens.raised : .clear))
         }
         .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -192,9 +191,9 @@ private struct ToolButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(active ? DesignTokens.utility : (hovering ? DesignTokens.ink : DesignTokens.inkSecondary))
-                .frame(width: 26, height: 22)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(active ? DesignTokens.utility : (hovering ? DesignTokens.ink : DesignTokens.inkTertiary))
+                .frame(width: 24, height: 22)
                 .background(Capsule().fill(active || hovering ? DesignTokens.raised : .clear))
         }
         .buttonStyle(.plain)
@@ -211,20 +210,29 @@ private struct ShellBody: View {
     var body: some View {
         Group {
             if hallway.account != .ready {
-                AccountView()
+                VStack(spacing: 10) {
+                    Text(hallway.account == .loading ? "Signing in…" : "Welcome to Doorbell").font(.headline)
+                    Button("Open Doorbell") { hallway.openWindow?() }.buttonStyle(.borderedProminent)
+                }
             } else {
             switch state.mode {
             case .hallway: HallwayView()
             case .shelf: ShelfPlaceholder()
             case .search: SearchView()
-            case .requests: RequestsView()
-            case .settings: SettingsView()
+            case .requests: HallwayView()
+            case .settings: HallwayView()
             case .account: HallwayView()
             case .peephole, .visiting: EmptyView()   // door modes render in the door shell
             }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            if let problem = hallway.problem {
+                Text(problem).font(.caption).foregroundStyle(.orange).padding(8).background(.black)
+                    .onTapGesture { hallway.openWindow?() }
+            }
+        }
     }
 }
 

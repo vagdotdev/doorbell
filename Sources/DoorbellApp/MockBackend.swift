@@ -17,9 +17,10 @@ actor MockBackend: DoorbellBackend {
     private nonisolated let eventsContinuation: AsyncStream<DoorEvent>.Continuation
 
     private var graph: Graph
-    private let storageKey = "mock.graph.v1"
+    private let storageKey: String
 
-    init() {
+    init(storageKey: String = "mock.graph.v1.\(AppConfig.current.profile)") {
+        self.storageKey = storageKey
         (updates, continuation) = AsyncStream<Void>.makeStream()
         (events, eventsContinuation) = AsyncStream<DoorEvent>.makeStream()
         let env = ProcessInfo.processInfo.environment
@@ -57,7 +58,10 @@ actor MockBackend: DoorbellBackend {
             }
         let requests = graph.people.filter { graph.followers[$0.id] == .pending }
         let outgoing = Set(graph.following.filter { $0.value == .pending }.map(\.key))
-        return HallwaySnapshot(me: graph.me, doors: doors, requests: requests, outgoing: outgoing)
+        let followers = graph.people.filter { graph.followers[$0.id] == .accepted }.map {
+            Door(profile: $0, followsMe: true, isCloseFriend: graph.closeFriends.contains($0.id))
+        }
+        return HallwaySnapshot(me: graph.me, doors: doors, followers: followers, requests: requests, outgoing: outgoing)
     }
 
     func search(_ query: String) async throws -> [Profile] {
@@ -83,6 +87,7 @@ actor MockBackend: DoorbellBackend {
 
     func ignore(_ id: Profile.ID) async throws {
         graph.followers.removeValue(forKey: id)
+        graph.closeFriends.remove(id)
         save()
     }
 
@@ -91,8 +96,21 @@ actor MockBackend: DoorbellBackend {
         save()
     }
 
+    func removeFollower(_ id: Profile.ID) async throws {
+        graph.followers.removeValue(forKey: id)
+        graph.following.removeValue(forKey: id)
+        graph.closeFriends.remove(id)
+        save()
+    }
+
+    func updateDisplayName(_ name: String) async throws {
+        guard ProfileValidation.validName(name) else { throw BackendError.invalidProfile }
+        graph.me.displayName = name
+        save()
+    }
+
     func setCloseFriend(_ id: Profile.ID, _ on: Bool) async throws {
-        guard graph.followers[id] == .accepted else { return }
+        guard !on || graph.followers[id] == .accepted else { throw BackendError.noProfile }
         if on { graph.closeFriends.insert(id) } else { graph.closeFriends.remove(id) }
         save()
     }

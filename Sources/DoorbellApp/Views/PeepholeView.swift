@@ -19,7 +19,7 @@ struct PeepholeView: View {
     var body: some View {
         DoorFrame(geometry: geometry, lit: door.listening || flare) {
             DoorTitle(name: visitor.displayName) {
-                Text(door.listening ? "Listening" : "Outside")
+                Text(door.listening ? "Listening" : "Knocking")
                     .contentTransition(.opacity)
             }
         } glass: {
@@ -42,7 +42,7 @@ struct PeepholeView: View {
                     withAnimation(DesignTokens.spring) { door.toggleListening() }
                 }
                 // In a room already: they join it. Otherwise they come into yours.
-                RoundControl(symbol: "door.left.hand.open", label: door.room.isActive ? "Let In" : "Accept",
+                RoundControl(symbol: "checkmark", label: door.room.isActive ? "Let In" : "Accept",
                              tint: DesignTokens.openDoor) { door.openDoor() }.disabled(door.isAdmitting)
             }
         }

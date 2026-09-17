@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// I'm at their door. They can see and hear me; I see myself as they do.
+/// I'm knocking. They can see and hear me; I see myself as they do.
 struct VisitingView: View {
     let door: Door
     let geometry: NotchGeometry
@@ -16,10 +16,10 @@ struct VisitingView: View {
 
     var body: some View {
         DoorFrame(geometry: geometry) {
-            DoorTitle(name: "\(firstName)’s door") {
+            DoorTitle(name: door.profile.displayName) {
                 HStack(spacing: 6) {
                     KnockingDots()
-                    Text(media.phase == .connecting ? "Connecting…" : (media.problem ?? "Your camera and mic are live when enabled"))
+                    Text(media.phase == .connecting ? "Connecting…" : (media.problem ?? "Knocking — they can see and hear you"))
                 }
             }
         } glass: {
@@ -36,10 +36,6 @@ struct VisitingView: View {
         } controls: {
             RoundControl(symbol: "xmark", label: "Leave") { controller.leaveVisit() }
         }
-    }
-
-    private var firstName: String {
-        door.profile.displayName.split(separator: " ").first.map(String.init) ?? door.profile.handle
     }
 }
 

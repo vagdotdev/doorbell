@@ -60,34 +60,6 @@ struct PillButton: View {
     }
 }
 
-/// Two-or-more options in a raised track. Used where a native segmented control
-/// would fight the black shell.
-struct SegmentedPills<Option: Hashable & Identifiable>: View {
-    let options: [Option]
-    @Binding var selection: Option
-    let label: (Option) -> String
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(options) { option in
-                Button { withAnimation(.easeOut(duration: 0.15)) { selection = option } } label: {
-                    Text(label(option))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(selection == option ? DesignTokens.ink : DesignTokens.inkSecondary)
-                        .padding(.horizontal, 10)
-                        .frame(height: 22)
-                        .background(
-                            Capsule().fill(selection == option ? .white.opacity(0.14) : .clear)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(2)
-        .background(Capsule().fill(DesignTokens.raised))
-    }
-}
-
 /// One line in a list of people: avatar, name, handle, and whatever goes on the right.
 struct PersonRow<Trailing: View>: View {
     let profile: Profile

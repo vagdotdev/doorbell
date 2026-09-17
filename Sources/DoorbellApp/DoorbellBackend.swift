@@ -9,11 +9,14 @@ protocol DoorbellBackend: Sendable {
     var events: AsyncStream<DoorEvent> { get }
 
     // Account
-    func accountState() async -> AccountState
+    func accountState() async throws -> AccountState
     func signIn(email: String, password: String) async throws
     func signUp(email: String, password: String) async throws
     func claimHandle(_ handle: String, displayName: String) async throws
     func signOut() async
+    func signIn(provider: AccountProvider) async throws
+    func sendMagicLink(email: String) async throws
+    func handleAuthCallback(_ url: URL) async throws
 
     // Graph
     func hallway() async throws -> HallwaySnapshot
@@ -21,8 +24,10 @@ protocol DoorbellBackend: Sendable {
     func request(_ id: Profile.ID) async throws
     func accept(_ id: Profile.ID) async throws
     func ignore(_ id: Profile.ID) async throws
-    func removeFollower(_ id: Profile.ID) async throws
     func unfollow(_ id: Profile.ID) async throws
+    func removeFollower(_ id: Profile.ID) async throws
+    func updateDisplayName(_ name: String) async throws
+    func isHandleAvailable(_ handle: String) async throws -> Bool
     func setCloseFriend(_ id: Profile.ID, _ on: Bool) async throws
 
     // Doors
@@ -46,12 +51,17 @@ protocol DoorbellBackend: Sendable {
 extension DoorbellBackend {
     func removeFollower(_ id: Profile.ID) async throws { try await ignore(id) }
     func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {}
-    func accountState() async -> AccountState { .ready }
+    func accountState() async throws -> AccountState { .ready }
     func signIn(email: String, password: String) async throws {}
     func signUp(email: String, password: String) async throws {}
     func claimHandle(_ handle: String, displayName: String) async throws {}
     func signOut() async {}
+    func signIn(provider: AccountProvider) async throws { throw BackendError.noProfile }
+    func sendMagicLink(email: String) async throws { throw BackendError.noProfile }
+    func handleAuthCallback(_ url: URL) async throws { throw BackendError.noProfile }
     func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant? { nil }
     func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws {}
     func simulate(_ event: DoorEvent) async {}
+    func updateDisplayName(_ name: String) async throws { throw BackendError.noProfile }
+    func isHandleAvailable(_ handle: String) async throws -> Bool { true }
 }
