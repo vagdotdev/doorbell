@@ -66,7 +66,7 @@ if [[ "${1:-}" == "--publish" ]]; then
     codesign -dv --verbose=4 "$staging/Doorbell.app" 2>&1 | /usr/bin/grep -F -x 'Signature=adhoc' >/dev/null || {
       echo 'Private-beta publishing expects a valid ad-hoc build; use DOORBELL_DISTRIBUTION=signed for a signed release.' >&2; exit 1;
     }
-    notes="Doorbell private beta for Apple silicon Macs. The official installer verifies the download and clears quarantine (xattr); no Apple Developer membership is required. Install or update: https://doorbellnotch.vercel.app . Existing older copies need the update command once; this build includes Fresh Ring."
+    notes="Doorbell for Apple silicon Macs. Install: https://doorbellnotch.vercel.app — the app updates itself when you open it."
   elif [[ "$distribution" == signed ]]; then
     spctl --assess --type execute "$staging/Doorbell.app"
     notes="Doorbell macOS app — signed release with Fresh Ring updates. Install: https://doorbellnotch.vercel.app"

@@ -27,7 +27,7 @@ doorbell_validate_app() {
   kind="$(doorbell_signature_kind "$app")" || { echo 'Unsupported app signature. Existing app was kept.' >&2; return 1; }
   if [[ "$kind" != adhoc || "${DOORBELL_ALLOW_UNSIGNED:-0}" != 1 ]]; then
     spctl --assess --type execute "$app" || {
-      echo 'This build is not approved by macOS. Use the official Doorbell beta installer for the private beta.' >&2
+      echo 'This build is not approved by macOS. Install from https://doorbellnotch.vercel.app' >&2
       return 1
     }
   fi
@@ -52,7 +52,7 @@ doorbell_validate_update() {
     # Bundle integrity, backend identity, and exact release version still apply.
     doorbell_validate_app "$incoming" || return 1
   else
-    echo 'This private beta uses the official Doorbell installer to update. Existing app was kept.' >&2
+    echo 'Use the official Doorbell installer to update. Existing app was kept.' >&2
     return 1
   fi
   current_backend="$(doorbell_config_value "$current" DOORBELL_BACKEND)"

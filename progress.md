@@ -28,7 +28,7 @@ Done: a real app. App icon (the approved pinhole from `branding/macos-app-icon` 
 
 Done: occupied knock is Add to this call / End this call (`docs/bring-in-plan.md`).
 
-Now: six-hour notch moon, friends-only Open Door, mic fixes and xattr-beta updater under QA. Handle-only login stays; later: `passwordlogin.md`.
+Now: friends install from doorbellnotch.vercel.app; Fresh Ring auto-updates on launch.
 
 Next: utilities, app window for settings (`docs/first-launch.md` §3), ship. Supabase stack is legacy beside Convex.
 

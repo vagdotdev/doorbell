@@ -319,6 +319,15 @@
     .copy.copied .glyph-copy { display: none; }
     .copy.copied .glyph-done { display: block; }
 
+    .hint {
+      grid-column: 1 / -1;
+      margin: -4px 0 0;
+      padding-left: calc(72px + 16px);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--gray-light);
+    }
+
     footer {
       padding: 32px 24px 40px;
       text-align: center;
@@ -327,12 +336,22 @@
       color: var(--gray);
     }
 
+    footer .release {
+      color: var(--gray-light);
+    }
+
+    footer .sep {
+      margin: 0 0.35em;
+      color: var(--gray-dark);
+    }
+
     @media (max-width: 520px) {
       .row {
         grid-template-columns: 1fr;
         gap: 8px;
       }
       .label { text-align: left; }
+      .hint { padding-left: 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -367,7 +386,7 @@
 
   <div class="page" id="page">
     <main>
-      <h1><span class="name">doorbell</span><span class="kind">macapp · beta</span></h1>
+      <h1><span class="name">doorbell</span><span class="kind">macapp</span></h1>
       <div class="commands">
         <div class="row">
           <span class="label">install</span>
@@ -398,10 +417,15 @@
               </svg>
             </button>
           </div>
+          <p class="hint">the app checks for updates when you open it — you usually won’t need this.</p>
         </div>
       </div>
     </main>
-    <footer>made by vagdev ;)</footer>
+    <footer>
+      <span class="release">latest <span id="release-tag">v2026.09.19-0249-d93b5cb</span></span>
+      <span class="sep">·</span>
+      made by vagdev ;)
+    </footer>
   </div>
 
   <script>
@@ -505,6 +529,15 @@
     }
 
     runIntro();
+
+    fetch("https://api.github.com/repos/vagdotdev/doorbell/releases/latest")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((release) => {
+        if (release?.tag_name) {
+          document.getElementById("release-tag").textContent = release.tag_name;
+        }
+      })
+      .catch(() => { /* offline or rate-limited; keep baked tag */ });
 
     document.querySelectorAll(".copy").forEach((el) => {
       let timer;
