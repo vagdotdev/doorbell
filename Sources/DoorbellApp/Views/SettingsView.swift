@@ -240,6 +240,7 @@ private struct OpenDoorPolicyCard: View {
         // macOS otherwise chooses Profile's TextField and scrolls this first
         // setting out of view as soon as Settings opens.
         .defaultFocus($policyFocused, true)
+        .onAppear { policyFocused = true }
     }
 
     private var status: String {

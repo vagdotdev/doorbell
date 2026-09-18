@@ -26,7 +26,7 @@ struct QuietPeriodTests {
 
     @Test func earlyOffAndLegacyMigration() {
         withStore { store in
-            let now = Date()
+            let now = Date(timeIntervalSince1970: 1_000_000)
             #expect(store.restore(at: now) == nil)
             store.defaults.set(true, forKey: SettingsKey.quiet)
             let deadline = store.restore(at: now)
@@ -41,7 +41,7 @@ struct QuietPeriodTests {
 
     @Test func clockRollbackCapsRemainingQuietAtSixHours() {
         withStore { store in
-            let now = Date()
+            let now = Date(timeIntervalSince1970: 1_000_000)
             store.set(true, at: now)
             let past = now.addingTimeInterval(-86_400)
             #expect(store.restore(at: past) == past.addingTimeInterval(21_600))
