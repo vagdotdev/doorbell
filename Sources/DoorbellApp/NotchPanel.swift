@@ -116,6 +116,11 @@ final class NotchPanel: NSPanel {
             let email = String(cred[..<colon]), password = String(cred[cred.index(after: colon)...])
             Task { @MainActor [weak self] in try? await self?.hallway.signIn(email: email, password: password) }
         }
+        //   DOORBELL_JOIN=name:handle  name-yourself join on the friend-group path
+        if let pair = env["DOORBELL_JOIN"], let colon = pair.firstIndex(of: ":") {
+            let name = String(pair[..<colon]), handle = String(pair[pair.index(after: colon)...])
+            Task { @MainActor [weak self] in try? await self?.hallway.join(handle: handle, displayName: name) }
+        }
         if let mode = env["DOORBELL_START_MODE"] {
             // Board modes wait for the account to settle, which otherwise lands on the hallway.
             func once(_ target: ShellMode) {

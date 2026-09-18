@@ -47,6 +47,7 @@ DOORBELL_SIMULATE=knock:arjun swift run        # or walkin:arjun — fires 2 s a
 DOORBELL_MOCK_RESET=1 swift run                # fresh fake graph
 DOORBELL_SNAPSHOT=/tmp/door.png swift run      # write the panel to PNG after 3.5 s and quit (DOORBELL_SNAPSHOT_DELAY)
 DOORBELL_SIGNIN=vagdev@doorbell.local:doorbell   # real backend: sign in on launch (join credentials)
+DOORBELL_JOIN=Dave:dave                        # name-yourself join on launch (friend-group path)
 DOORBELL_AUTO_OPEN=5                           # real backend: answer the next knock after 5 s
 ```
 

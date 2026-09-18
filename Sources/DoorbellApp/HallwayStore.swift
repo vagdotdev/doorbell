@@ -150,3 +150,12 @@ final class HallwayStore: ObservableObject {
 
     enum Relationship { case none, requested, following }
 }
+
+/// What the Join form tells the person when joining fails. Pure so it can be tested:
+/// a taken handle names the handle, anything else stays generic and offline-safe.
+func joinProblem(handle: String, error: Error) -> String {
+    if error.localizedDescription.localizedCaseInsensitiveContains("taken") {
+        return "@\(handle) is taken"
+    }
+    return "Couldn’t connect. Try again in a moment."
+}

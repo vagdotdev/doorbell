@@ -80,14 +80,7 @@ private struct JoinForm: View {
         let display = name.trimmingCharacters(in: .whitespaces)
         Task {
             do { try await hallway.join(handle: cleaned, displayName: display) }
-            catch {
-                let text = error.localizedDescription
-                if text.localizedCaseInsensitiveContains("taken") {
-                    problem = "@\(cleaned) is taken"
-                } else {
-                    problem = "Couldn’t connect. Try again in a moment."
-                }
-            }
+            catch { problem = joinProblem(handle: cleaned, error: error) }
             busy = false
         }
     }
