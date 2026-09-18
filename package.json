@@ -10,10 +10,13 @@
     "@auth/core": "^0.41.3",
     "@convex-dev/auth": "^0.0.95",
     "convex": "^1.45.0",
+    "convex-api-keys": "^0.2.1",
+    "convex-helpers": "^0.1.124",
     "livekit-server-sdk": "^2.19.0"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
+    "@livekit/rtc-node": "1.0.0",
     "@types/node": "^22.20.3",
     "convex-test": "^0.0.58",
     "typescript": "^5.9.2",

@@ -4,6 +4,20 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 export const HANDLE = /^[a-z0-9_]{3,20}$/;
+export const NAME_CHANGE_LIMIT = 2;
+export const NAME_CHANGE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+export function recentNameChanges(at: number[] | undefined, now = Date.now()): number[] {
+  return (at ?? []).filter((t) => now - t < NAME_CHANGE_WINDOW_MS).sort((a, b) => a - b);
+}
+
+export function nameChangeQuota(at: number[] | undefined, now = Date.now()) {
+  const recent = recentNameChanges(at, now);
+  const remaining = Math.max(0, NAME_CHANGE_LIMIT - recent.length);
+  const resetsAt =
+    recent.length >= NAME_CHANGE_LIMIT ? recent[0]! + NAME_CHANGE_WINDOW_MS : null;
+  return { remaining, resetsAt };
+}
 
 /// What a search result or a hallway entry shows. Nothing else about a person leaves
 /// the server.
@@ -12,12 +26,14 @@ export const profileValidator = v.object({
   handle: v.string(),
   displayName: v.string(),
   avatarUrl: v.union(v.string(), v.null()),
+  openDoorPolicy: v.boolean(),
 });
 export type PublicProfile = {
   id: Id<"profiles">;
   handle: string;
   displayName: string;
   avatarUrl: string | null;
+  openDoorPolicy: boolean;
 };
 
 export async function publicProfile(
@@ -29,6 +45,7 @@ export async function publicProfile(
     handle: p.handle,
     displayName: p.displayName,
     avatarUrl: p.avatarStorageId ? await ctx.storage.getUrl(p.avatarStorageId) : null,
+    openDoorPolicy: p.openDoorPolicy ?? false,
   };
 }
 

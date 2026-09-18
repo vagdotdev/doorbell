@@ -31,7 +31,8 @@ struct AvatarView: View {
     }
 
     private var localPortrait: NSImage? {
-        guard profile.avatarURL == nil,
+        guard !AppConfig.current.isLive,
+              profile.avatarURL == nil,
               let url = Bundle.module.url(forResource: profile.handle,
                                           withExtension: "jpg",
                                           subdirectory: "Portraits") else { return nil }
@@ -61,7 +62,12 @@ struct AvatarView: View {
             } else {
                 initialsDisc
             }
-            Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1)
+            // The same rim as the peephole glass, lit from the top: a face behind a lens.
+            Circle().strokeBorder(
+                LinearGradient(colors: [.white.opacity(0.38), DesignTokens.horizon.opacity(0.08)],
+                               startPoint: .top, endPoint: .bottom),
+                lineWidth: 1
+            )
         }
         .frame(width: size, height: size)
         .clipShape(Circle())

@@ -11,7 +11,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Friends see you when you knock on their door, and in the room.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Friends hear you when you knock on their door, and in the room.</string>
+	<string>People hear you quietly through the door when you enable doorstep audio, and normally after you accept a call.</string>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>Doorbell pauses automatic walk-ins and doorstep audio while Focus is on.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>

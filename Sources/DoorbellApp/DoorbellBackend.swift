@@ -12,11 +12,14 @@ protocol DoorbellBackend: Sendable {
     func accountState() async -> AccountState
     /// Sign-in email when known (Convex Auth). Nil on the mock.
     func accountEmail() async -> String?
+    /// Display-name changes left in the rolling 14-day window. Nil on backends without a limit.
+    func accountNameQuota() async -> NameQuota?
     func signIn(email: String, password: String) async throws
     func signUp(email: String, password: String) async throws
     func claimHandle(_ handle: String, displayName: String) async throws
     /// Change the name friends see.
     func updateProfile(displayName: String) async throws
+    func setOpenDoorPolicy(_ enabled: Bool) async throws
     /// Upload a JPEG/PNG as the profile photo. Empty data is refused by the backend.
     func setAvatar(jpegOrPng: Data, contentType: String) async throws
     /// Drop the profile photo.
@@ -46,6 +49,7 @@ protocol DoorbellBackend: Sendable {
     /// Let a knocker in. `room` is where I am right now — my own room, or one I'm a
     /// guest in — and is where their seat will be. They hear about it on their door.
     func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws
+    func admit(_ id: Profile.ID, visitID: UUID, into room: String?, automatically: Bool) async throws
 
     /// Development only: pretend something happened at my door.
     func simulate(_ event: DoorEvent) async
@@ -56,14 +60,24 @@ extension DoorbellBackend {
     func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {}
     func accountState() async -> AccountState { .ready }
     func accountEmail() async -> String? { nil }
+    func accountNameQuota() async -> NameQuota? { nil }
     func signIn(email: String, password: String) async throws {}
     func signUp(email: String, password: String) async throws {}
     func claimHandle(_ handle: String, displayName: String) async throws {}
     func updateProfile(displayName: String) async throws {}
+    func setOpenDoorPolicy(_ enabled: Bool) async throws { throw DoorPolicyError.unsupported }
     func setAvatar(jpegOrPng: Data, contentType: String) async throws {}
     func clearAvatar() async throws {}
     func signOut() async {}
     func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant? { nil }
     func admit(_ id: Profile.ID, visitID: UUID, into room: String?) async throws {}
+    func admit(_ id: Profile.ID, visitID: UUID, into room: String?, automatically: Bool) async throws {
+        try await admit(id, visitID: visitID, into: room)
+    }
     func simulate(_ event: DoorEvent) async {}
+}
+
+enum DoorPolicyError: LocalizedError {
+    case unsupported
+    var errorDescription: String? { "Open Door Policy needs the current Doorbell backend." }
 }

@@ -1,3 +1,4 @@
 - Small floating room for hanging out.
 - Smaller self-view.
 - Remember camera preferences between visits.
+- Personal passwords without recreating accounts (`passwordlogin.md`).

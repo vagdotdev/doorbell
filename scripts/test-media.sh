@@ -28,5 +28,5 @@ for attempt in range(50):
     except OSError: time.sleep(.1)
 else: raise SystemExit('Test LiveKit server did not start')
 PY
-npx --yes deno run --allow-env --allow-write scripts/media-test-tokens.ts "$MEDIA_DIR/tokens.json"
+npx --yes deno run --node-modules-dir=none --allow-env --allow-write scripts/media-test-tokens.ts "$MEDIA_DIR/tokens.json"
 DOORBELL_MEDIA_TEST_CONFIG="$MEDIA_DIR/tokens.json" swift test --filter LiveKitIntegrationTests

@@ -23,7 +23,7 @@ enum DesignTokens {
     static let glassRadius: CGFloat = 16
     static let controlSize: CGFloat = 40
     /// A friend's voice through the door, before you choose to listen.
-    static let doorVolume: Float = 0.25
+    static let doorVolume: Float = 0.15
     /// Raised-cosine fades for incoming voice. Long enough to feel, short enough to vanish.
     /// Arrival is slow on purpose: it rises under the tail of the knock tone.
     static let audioArrive: TimeInterval = 0.9

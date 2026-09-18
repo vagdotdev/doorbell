@@ -6,8 +6,11 @@ DerivedData/
 .DS_Store
 .env
 .env.local
+.env.local.*.bak
+.env.secrets
 node_modules/
 .convex/
 supabase/.temp/
 build/
 .park/
+web/.vercel/

@@ -26,13 +26,26 @@ swift run     # run the shell (agent app: notch panel only, no dock icon)
 
 ### Install (one command)
 
-Builds a signed `.app`, puts it in `/Applications`, clears Gatekeeper quarantine, and opens it:
+Downloads the latest release, checks its checksum and signature, stages it safely, and installs to `/Applications`. A public release must be signed and notarized. See `docs/launch-audit.md` for current release blockers.
+No Xcode, no clone, no compile — same idea as [Megaphone](https://github.com/Kuberwastaken/megaphone).
+
+First launch is a window: your name and @handle, camera and mic. Then the notch takes over.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/vagdotdev/doorbell/main/scripts/install.sh | zsh
+  curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh
 ```
 
-Already have a clone? `scripts/install.sh`. Already have a downloaded app?
+Requires macOS 15+. The app bundle carries the cloud Convex URL; only the join phrase
+travels in the install command.
+
+**Owner, first ship:** in a real terminal, `scripts/deploy-cloud.sh` (Convex browser login once),
+then `scripts/release.sh --publish`, then `scripts/deploy-site.sh` — or all at once: `scripts/ship.sh`.
+
+Build from source (dev on your Mac):
+
+```sh
+DOORBELL_USE_LOCAL=1 DOORBELL_FROM_SOURCE=1 scripts/install.sh
+```
 
 ```sh
 xattr -cr /Applications/Doorbell.app && open /Applications/Doorbell.app
@@ -69,18 +82,14 @@ secret (`DOORBELL_JOIN_SECRET`).
 
 ```sh
 npm install
-livekit-server --dev --bind 127.0.0.1          # media; keep it running
 npm run dev                                    # local Convex; writes CONVEX_URL to .env.local; keep it running
-node scripts/convex-auth-keys.mjs              # once: JWT signing keys
-npx convex env set LIVEKIT_URL=ws://127.0.0.1:7880
-npx convex env set LIVEKIT_API_KEY=devkey
-npx convex env set LIVEKIT_API_SECRET=secret
-npx convex env set LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880
-cp .env.example .env                           # already points at Convex if you follow the example
-python3 scripts/seed-friends.sh                # vagdev, priya, arjun — already friends
-scripts/bundle.sh debug
-open build/Doorbell.app                        # Join as @vagdev (or any new handle)
+cp .env.secrets.example .env.secrets           # LiveKit Cloud keys + the join phrase (gitignored)
+scripts/setup-local.sh                         # .env, Convex secrets, auth keys, seed, tests, bundle
+open build/Doorbell.app                        # first launch: the window; join as @vagdev (or any new handle)
 ```
+
+Without LiveKit Cloud, `livekit-server --dev --bind 127.0.0.1` and `ws://127.0.0.1:7880` /
+`devkey` / `secret` in `.env.secrets` work the same.
 
 Second door on the same Mac:
 
@@ -90,11 +99,12 @@ open -n build/Doorbell.app --env DOORBELL_PROFILE=bob
 
 Join as `@priya`. Vagdev can knock on Priya.
 
-Backend tests: `npx vitest run` and `npx tsc --noEmit`.
+Backend tests: `npx vitest run` and `npx tsc --noEmit`. Full audit checks: `scripts/check.sh` (includes disposable local Convex/LiveKit services).
 
-**Cloud (when you want friends off this Mac):** in a real terminal run `npx convex login`,
-then `npx convex deploy`, `node scripts/convex-auth-keys.mjs --prod`, set the LiveKit
-env vars with `--prod`, and put the production `CONVEX_URL` in `.env`. Details: `docs/convex.md`.
+**Cloud (when you want friends off this Mac):** in a real terminal, `scripts/deploy-cloud.sh`.
+It signs in (browser, once), creates the project, deploys production, sets its secrets from
+`.env.secrets`, and writes `.env.production` — commit that, and the install command above
+requires Apple silicon and macOS 15 or later; oldest-OS verification is still pending. Details: `docs/convex.md`.
 
 ### Old backend, locally (Supabase — still works)
 

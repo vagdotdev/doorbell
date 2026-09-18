@@ -9,6 +9,7 @@ describe("account", () => {
       state: "signedOut",
       me: null,
       email: null,
+      nameQuota: { remaining: 2, resetsAt: null },
     });
 
     const { as } = await signedIn(t, "a@test.local");
@@ -16,6 +17,7 @@ describe("account", () => {
       state: "needsHandle",
       me: null,
       email: "a@test.local",
+      nameQuota: { remaining: 2, resetsAt: null },
     });
 
     const me = await as.mutation(api.profiles.claimHandle, { handle: "Alice", displayName: " Alice Rao " });
@@ -25,8 +27,9 @@ describe("account", () => {
     expect(after.state).toBe("ready");
     expect(after.me).toEqual(me);
     expect(after.email).toBe("a@test.local");
+    expect(after.nameQuota).toEqual({ remaining: 2, resetsAt: null });
     // Only public fields leave the server.
-    expect(Object.keys(me).sort()).toEqual(["avatarUrl", "displayName", "handle", "id"]);
+    expect(Object.keys(me).sort()).toEqual(["avatarUrl", "displayName", "handle", "id", "openDoorPolicy"]);
   });
 
   test("handle rules: format, uniqueness (case-insensitive), once per account", async () => {
@@ -50,29 +53,32 @@ describe("account", () => {
     await expect(alice.as.mutation(api.profiles.update, { displayName: "  " })).rejects.toThrow(/name/);
     await expect(t.mutation(api.profiles.update, { displayName: "X" })).rejects.toThrow(/Sign in/);
 
-    const storageId = await t.run(async (ctx) => {
-      return await ctx.storage.store(new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }));
-    });
-    const withPhoto = await alice.as.mutation(api.profiles.setAvatar, { storageId });
+    const second = await alice.as.mutation(api.profiles.update, { displayName: "Alice R." });
+    expect(second.displayName).toBe("Alice R.");
+    await expect(alice.as.mutation(api.profiles.update, { displayName: "Ali" })).rejects.toThrow(
+      /twice every 14 days/,
+    );
+    const account = await alice.as.query(api.profiles.account, {});
+    expect(account.nameQuota.remaining).toBe(0);
+    expect(account.nameQuota.resetsAt).toEqual(expect.any(Number));
+    // Same name is a no-op and does not burn quota.
+    const noop = await alice.as.mutation(api.profiles.update, { displayName: "Alice R." });
+    expect(noop.displayName).toBe("Alice R.");
+
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 1]).buffer;
+    const withPhoto = await alice.as.action(api.profiles.uploadAvatar, { bytes, contentType: "image/jpeg" });
     expect(withPhoto.avatarUrl).toEqual(expect.any(String));
-    expect(await t.run(async (ctx) => ctx.storage.getUrl(storageId))).not.toBeNull();
-
-    const nextId = await t.run(async (ctx) => {
-      return await ctx.storage.store(new Blob([new Uint8Array([4, 5])], { type: "image/png" }));
-    });
-    await alice.as.mutation(api.profiles.setAvatar, { storageId: nextId });
-    // Old blob is gone; new one is the avatar.
-    expect(await t.run(async (ctx) => ctx.storage.getUrl(storageId))).toBeNull();
-    expect(await t.run(async (ctx) => ctx.storage.getUrl(nextId))).not.toBeNull();
-
-    const cleared = await alice.as.mutation(api.profiles.clearAvatar, {});
-    expect(cleared.avatarUrl).toBeNull();
-    expect(await t.run(async (ctx) => ctx.storage.getUrl(nextId))).toBeNull();
-
-    await expect(t.mutation(api.profiles.generateUploadUrl, {})).rejects.toThrow(/Sign in/);
-    const url = await alice.as.mutation(api.profiles.generateUploadUrl, {});
-    expect(typeof url).toBe("string");
-    expect(url.length).toBeGreaterThan(0);
+    const storageId = (await t.run(ctx => ctx.db.get(alice.profileId)))!.avatarStorageId!;
+    await alice.as.mutation(api.profiles.setAvatar, { storageId }); // idempotent, never deletes own current image
+    expect(await t.run(ctx => ctx.storage.getUrl(storageId))).not.toBeNull();
+    await alice.as.action(api.profiles.uploadAvatar, { bytes, contentType: "image/jpeg" });
+    expect(await t.run(ctx => ctx.storage.getUrl(storageId))).toBeNull();
+    const nextId = (await t.run(ctx => ctx.db.get(alice.profileId)))!.avatarStorageId!;
+    expect((await alice.as.mutation(api.profiles.clearAvatar, {})).avatarUrl).toBeNull();
+    expect(await t.run(ctx => ctx.storage.getUrl(nextId))).toBeNull();
+    await expect(t.action(api.profiles.uploadAvatar, { bytes, contentType: "image/jpeg" })).rejects.toThrow(/Sign in/);
+    await expect(alice.as.action(api.profiles.uploadAvatar, { bytes, contentType: "text/html" })).rejects.toThrow(/JPEG/);
+    await expect(alice.as.mutation(api.profiles.generateUploadUrl, {})).rejects.toThrow(/Update/);
   });
 });
 
@@ -89,7 +95,7 @@ describe("search", () => {
     expect(byName.map((p) => p.handle)).toEqual(["bob"]);
     expect(await alice.as.query(api.profiles.search, { q: "a" })).toEqual([]);
     expect(await t.query(api.profiles.search, { q: "alice" })).toEqual([]); // signed out
-    for (const p of byPrefix) expect(Object.keys(p).sort()).toEqual(["avatarUrl", "displayName", "handle", "id"]);
+    for (const p of byPrefix) expect(Object.keys(p).sort()).toEqual(["avatarUrl", "displayName", "handle", "id", "openDoorPolicy"]);
   });
 });
 
@@ -132,11 +138,11 @@ describe("friendships", () => {
     await alice.as.mutation(api.graph.request, { profileId: bob.profileId });
     await bob.as.mutation(api.graph.accept, { profileId: alice.profileId });
     const { internal } = await import("./_generated/api");
-    expect((await alice.as.mutation(internal.doors.decideVisit, { door: "bob" })).mode).toBe("knock");
-    expect((await bob.as.mutation(internal.doors.decideVisit, { door: "alice" })).mode).toBe("knock");
+    expect((await alice.as.mutation(internal.doors.decideVisit, { door: "bob", visitId: crypto.randomUUID() })).mode).toBe("knock");
+    expect((await bob.as.mutation(internal.doors.decideVisit, { door: "alice", visitId: crypto.randomUUID() })).mode).toBe("knock");
     await alice.as.mutation(api.graph.unfollow, { profileId: bob.profileId });
-    await expect(alice.as.mutation(internal.doors.decideVisit, { door: "bob" })).rejects.toThrow(/don't follow/);
-    await expect(bob.as.mutation(internal.doors.decideVisit, { door: "alice" })).rejects.toThrow(/don't follow/);
+    await expect(alice.as.mutation(internal.doors.decideVisit, { door: "bob", visitId: crypto.randomUUID() })).rejects.toThrow(/don't follow/);
+    await expect(bob.as.mutation(internal.doors.decideVisit, { door: "alice", visitId: crypto.randomUUID() })).rejects.toThrow(/don't follow/);
   });
 
   test("request → accept by the followee only → doors on both sides", async () => {

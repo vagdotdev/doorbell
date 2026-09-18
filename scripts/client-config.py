@@ -1,6 +1,21 @@
 #!/usr/bin/env python3
 """Emit public app configuration for the bundle. Local builds may use Convex or Supabase."""
-import argparse, base64, json, pathlib, urllib.parse
+import argparse, base64, ipaddress, json, pathlib, urllib.parse
+
+def validate_url(url, local):
+    parsed = urllib.parse.urlparse(url)
+    if not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('', '/'):
+        raise ValueError('Invalid backend URL')
+    _ = parsed.port  # Invalid ports must fail, not be mistaken for a hostname.
+    try:
+        private = not ipaddress.ip_address(parsed.hostname).is_global
+    except ValueError:
+        private = parsed.hostname == 'localhost' or parsed.hostname.endswith(('.local', '.localhost')) or '.' not in parsed.hostname
+    if local:
+        if parsed.scheme not in ('http', 'https'): raise ValueError('Backend requires HTTP or HTTPS')
+    elif parsed.scheme != 'https' or private:
+        raise ValueError('Distribution requires a public HTTPS backend URL')
+    return parsed
 
 def client_config(text, local=False):
     values = {}
@@ -14,22 +29,12 @@ def client_config(text, local=False):
         return ''
     if backend == 'convex':
         url = values.get('CONVEX_URL', '')
-        parsed = urllib.parse.urlparse(url)
-        if not parsed.hostname:
-            raise ValueError('CONVEX_URL is required for Convex')
-        if not local and (parsed.scheme not in ('https', 'http') or parsed.hostname in ('localhost', '127.0.0.1', '::1')):
-            # Cloud distribution needs a reachable Convex URL; local debug may use loopback.
-            if not local:
-                raise ValueError('Distribution requires a public CONVEX_URL (not localhost)')
-        secret = values.get('DOORBELL_JOIN_SECRET', 'doorbell')
-        return f'DOORBELL_BACKEND=convex\nCONVEX_URL={url}\nDOORBELL_JOIN_SECRET={secret}\n'
+        validate_url(url, local)
+        return f'DOORBELL_BACKEND=convex\nCONVEX_URL={url}\n'
     if backend != 'supabase':
         raise ValueError('Set DOORBELL_BACKEND to convex or supabase')
     url=values.get('SUPABASE_URL',''); key=values.get('SUPABASE_ANON_KEY','')
-    parsed=urllib.parse.urlparse(url)
-    if not parsed.hostname or parsed.username or parsed.password: raise ValueError('Invalid Supabase URL')
-    if not local and (parsed.scheme != 'https' or parsed.hostname in ('localhost','127.0.0.1','::1') or parsed.hostname.endswith('.local')):
-        raise ValueError('Distribution requires a public HTTPS Supabase URL')
+    validate_url(url, local)
     if not key or key.startswith('sb_secret_'): raise ValueError('A public Supabase key is required')
     if not key.startswith('sb_publishable_'):
         try:

@@ -2,8 +2,6 @@ import SwiftUI
 
 enum ShellMode: Equatable {
     case building, shelf, search, requests, settings
-    /// Signed out or without a handle yet: the board is the sign-in form.
-    case account
     /// Someone is at my door.
     case peephole(Profile)
     /// Someone is at my door while I'm not to be disturbed: a face, nothing else.
@@ -16,7 +14,7 @@ enum ShellMode: Equatable {
     var pins: Bool {
         switch self {
         case .building, .shelf: false
-        case .search, .requests, .settings, .account, .peephole, .pinhole, .visiting: true
+        case .search, .requests, .settings, .peephole, .pinhole, .visiting: true
         }
     }
 
@@ -57,7 +55,10 @@ final class NotchState: ObservableObject {
     }
     /// Toggles to make the shell bounce once (a knock).
     @Published var bounce = false
-    /// The intro that plays the first time the board opens with a building to show.
+    /// Keeps the board open without a pointer over it: the moment after first launch,
+    /// so the notch can show itself once before it goes quiet.
+    @Published var heldOpen = false { didSet { if oldValue != heldOpen { recompute() } } }
+    /// The intro that plays each time the board opens.
     /// `.playing` owns the avatars' geometry; `.settling` hands it to the building.
     @Published var splash: SplashPhase = .pending
 
@@ -70,6 +71,8 @@ final class NotchState: ObservableObject {
 
     var onKindChange: ((ShellKind) -> Void)?
     var onModeChange: ((ShellMode) -> Void)?
+    /// Signed out: the board offers to finish setting up, which happens in a window.
+    var onSetupRequested: (() -> Void)?
 
     private var hoverTask: Task<Void, Never>?
     private var hoverSettled = false
@@ -78,7 +81,7 @@ final class NotchState: ObservableObject {
     /// Door moments are not dismissed this way.
     func unpin() {
         switch mode {
-        case .search, .requests, .settings, .account: mode = .building
+        case .search, .requests, .settings: mode = .building
         default: break
         }
     }
@@ -99,7 +102,7 @@ final class NotchState: ObservableObject {
     }
 
     private func recompute() {
-        let expanded = hoverSettled || mode.pins
+        let expanded = hoverSettled || mode.pins || heldOpen
         let next: ShellKind = !expanded ? .compact : mode.isPinhole ? .pinhole : mode.isDoor ? .door : .board
         guard next != kind else { return }
         // The pinhole is not an event: it eases in, it does not spring.

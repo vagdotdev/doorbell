@@ -11,9 +11,10 @@ struct DoorShellView: View {
     private var size: CGSize { geometry.size(for: state.kind) }
     private var frameSize: CGSize { geometry.frameSize(for: state.kind) }
 
-    /// The intro plays the first time the board opens with a building to show.
+    /// The intro plays when the board opens and you have no friends yet.
     private var wantsSplash: Bool {
         state.kind == .board && state.splash != .done && hallway.me != nil
+            && hallway.orderedDoors.isEmpty
             && ProcessInfo.processInfo.environment["DOORBELL_NO_SPLASH"] == nil
     }
 
@@ -26,6 +27,13 @@ struct DoorShellView: View {
     var body: some View {
         ZStack(alignment: .top) {
             shape.fill(.black)
+            // Open, the black has a floor: the room's dark, rising from the bottom edge.
+            // At rest the shell is the notch and stays pure black.
+            shape.fill(LinearGradient(
+                stops: [.init(color: .clear, location: 0.35),
+                        .init(color: DesignTokens.roomFloor.opacity(0.9), location: 1)],
+                startPoint: .top, endPoint: .bottom))
+                .opacity(state.isOpen ? 1 : 0)
             // Glass, used once: a top-lit hairline down the sides. Stroked at 2pt and
             // clipped by the silhouette, so exactly 1pt sits inside the edge. Only once
             // open — at rest (and as a pinhole) the shell is the notch and nothing else.
@@ -66,6 +74,9 @@ struct DoorShellView: View {
         .onChange(of: hallway.account) { _, account in
             if account != .ready { state.splash = .pending }
         }
+        .onChange(of: hallway.orderedDoors.count) { _, count in
+            if count > 0 { state.splash = .done }
+        }
     }
 
     private var boardContent: some View {
@@ -76,24 +87,36 @@ struct DoorShellView: View {
                     .frame(height: geometry.notchHeight)
                     .padding(.horizontal, 14)
                 ShellBody()
-                    .background(Starfield(intensity: 0.55, seed: 11))
+                    .background {
+                        // The building's front step: the same dome the door stands on,
+                        // lower, so the row of doors has something under it.
+                        ZStack {
+                            Starfield(intensity: 0.55, seed: 11)
+                            Doorstep(rise: 30)
+                        }
+                    }
             }
-            // The shelf's handle: a small diamond in the bottom-right corner. Tapping
-            // swaps the board for what's inside your door — and back.
+            // Requests and shelf: bottom-right corner tools.
             VStack {
                 Spacer()
                 HStack {
                     Spacer()
-                    ShelfDiamond()
+                    BoardCornerTools()
                 }
             }
-            .padding(.trailing, 16)
-            .padding(.bottom, 8)
+            .padding(.trailing, 12)
+            .padding(.bottom, 6)
+            VStack {
+                Spacer()
+                VagdevCredit()
+            }
+            .padding(.bottom, 6)
+            .allowsHitTesting(false)
             .environment(\.avatarNamespace, avatars)
             .environment(\.splashOwnsAvatars, wantsSplash && state.splash != .settling)
             .environment(\.splashOnScreen, wantsSplash)
             if wantsSplash, let me = hallway.me {
-                SplashView(me: me, friends: hallway.doors.map(\.profile), geometry: geometry,
+                SplashView(me: me, friends: hallway.orderedDoors.map(\.profile), geometry: geometry,
                            namespace: avatars)
                     .zIndex(1)
             }
@@ -113,12 +136,30 @@ struct DoorShellView: View {
         let s = geometry.size(for: .door)
         Group {
             switch state.mode {
-            case .peephole(let visitor): PeepholeView(visitor: visitor, geometry: geometry, peep: controller.peep)
+            case .peephole(let visitor): PeepholeView(visitor: visitor, geometry: geometry, peep: controller.peep, room: controller.room)
             case .visiting(let door): VisitingView(door: door, geometry: geometry, media: controller.media)
             default: EmptyView()
             }
         }
         .frame(width: s.width, height: s.height)
+        .overlay(alignment: .topTrailing) {
+            QuietDoorButton()
+                .frame(height: geometry.notchHeight)
+                .padding(.trailing, 14)
+        }
+    }
+}
+
+private struct QuietDoorButton: View {
+    @EnvironmentObject private var door: DoorController
+
+    var body: some View {
+        ToolButton(symbol: door.quiet ? "moon.fill" : "moon", active: door.quiet) {
+            withAnimation(.easeOut(duration: 0.18)) { door.quiet.toggle() }
+        }
+        .help(door.quiet ? "\(door.quietLabel) · Click to turn off" : "Quiet for 6 hours · You can still accept calls")
+        .accessibilityLabel("Quiet Door")
+        .accessibilityValue(door.quiet ? door.quietLabel : "Off")
     }
 }
 
@@ -182,6 +223,7 @@ private struct TopRow: View {
                         selected: state.mode != .shelf && state.mode != .settings) { state.mode = .building }
                 Spacer()
                 HStack(spacing: 2) {
+                    QuietDoorButton()
                     ToolButton(symbol: "magnifyingglass", active: state.mode == .search) {
                         state.mode = state.mode == .search ? .building : .search
                     }
@@ -243,32 +285,74 @@ private struct PeepholeMark: View {
     }
 }
 
-/// A small diamond outline: what's inside your door. Filled while the shelf is open.
-private struct ShelfDiamond: View {
+/// Requests and shelf in the board's bottom-right corner.
+private struct BoardCornerTools: View {
     @EnvironmentObject private var state: NotchState
-    @State private var hovering = false
-    private var active: Bool { state.mode == .shelf }
+    @EnvironmentObject private var hallway: HallwayStore
 
     var body: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                state.mode = active ? .building : .shelf
+        HStack(spacing: 2) {
+            CornerTool(
+                symbol: "person.crop.circle.badge.plus",
+                active: state.mode == .requests,
+                badge: hallway.requests.count
+            ) {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    state.mode = state.mode == .requests ? .building : .requests
+                }
             }
-        } label: {
-            RoundedRectangle(cornerRadius: 2.5)
-                .strokeBorder(active ? DesignTokens.utility
-                                : (hovering ? DesignTokens.inkSecondary : DesignTokens.inkTertiary),
-                             lineWidth: 1.25)
-                .background(RoundedRectangle(cornerRadius: 2.5)
-                    .fill(active ? DesignTokens.utility.opacity(0.2) : .clear))
-                .rotationEffect(.degrees(45))
-                .frame(width: 12, height: 12)
-                .frame(width: 22, height: 22)
+            .help("Friend requests")
+            CornerTool(
+                symbol: "square.stack.3d.up",
+                active: state.mode == .shelf
+            ) {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    state.mode = state.mode == .shelf ? .building : .shelf
+                }
+            }
+            .help("Shelf")
+        }
+    }
+}
+
+private struct CornerTool: View {
+    let symbol: String
+    let active: Bool
+    var badge: Int = 0
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(active ? DesignTokens.utility
+                                    : (hovering ? DesignTokens.ink : DesignTokens.inkSecondary))
+                    .frame(width: 26, height: 22)
+                    .background(Capsule().fill(active || hovering ? DesignTokens.raised : .clear))
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(.black)
+                        .frame(minWidth: 14, minHeight: 14)
+                        .background(Circle().fill(DesignTokens.social))
+                        .overlay(Circle().strokeBorder(.black, lineWidth: 1.5))
+                        .offset(x: 5, y: -4)
+                }
+            }
         }
         .buttonStyle(.plain)
-        .help("Shelf — what's inside your door")
-        .accessibilityLabel("Shelf")
         .onHover { hovering = $0 }
+    }
+}
+
+/// Small credit, bottom of the board and onboarding window.
+struct VagdevCredit: View {
+    var body: some View {
+        Text("by vagdev")
+            .font(.system(size: 9.5, weight: .medium))
+            .foregroundStyle(DesignTokens.inkTertiary.opacity(0.7))
     }
 }
 
@@ -308,7 +392,6 @@ private struct ShellBody: View {
             case .search: SearchView().transition(.opacity)
             case .requests: RequestsView().transition(.opacity)
             case .settings: SettingsView().transition(.opacity)
-            case .account: BuildingView().transition(.opacity)
             case .peephole, .pinhole, .visiting: EmptyView()   // door modes render in their own shells
             }
             }

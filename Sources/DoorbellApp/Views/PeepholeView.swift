@@ -6,20 +6,22 @@ struct PeepholeView: View {
     let geometry: NotchGeometry
     @EnvironmentObject private var door: DoorController
     @ObservedObject private var peep: MediaSession
+    @ObservedObject private var room: RoomSession
     @AppStorage(SettingsKey.peepholeStyle) private var style: PeepholeStyle = .eyehole
     /// The knock lands as light on the doorstep, then lets go.
     @State private var flare = true
 
-    init(visitor: Profile, geometry: NotchGeometry, peep: MediaSession) {
+    init(visitor: Profile, geometry: NotchGeometry, peep: MediaSession, room: RoomSession) {
         self.visitor = visitor
         self.geometry = geometry
         self.peep = peep
+        self.room = room
     }
 
     var body: some View {
         DoorFrame(geometry: geometry, lit: door.listening || flare) {
             DoorTitle(name: visitor.displayName) {
-                Text(door.listening ? "Listening" : "Knocking")
+                Text(door.isAdmitting ? "Opening…" : door.doorstepAudioStatus)
                     .contentTransition(.opacity)
             }
         } glass: {
@@ -41,10 +43,21 @@ struct PeepholeView: View {
                              active: door.listening) {
                     withAnimation(DesignTokens.spring) { door.toggleListening() }
                 }
-                // In a room already: they join it. Otherwise they come into yours.
-                RoundControl(symbol: "checkmark", label: "Accept",
-                             tint: DesignTokens.openDoor) { door.openDoor() }
+                if room.isActive {
+                    RoundMenuControl(symbol: "checkmark",
+                                     label: door.isAdmitting ? "Opening…" : "Let in",
+                                     tint: DesignTokens.openDoor) {
+                        Button("Add to this call") { door.openDoor(bringIn: .add) }
+                            .disabled(room.isFull)
+                        Button("End this call") { door.openDoor(bringIn: .end) }
+                    }
                     .disabled(door.isAdmitting)
+                    .help(room.isFull ? "This call is full. End it to let them in." : "Add them to this call, or end it and take the knock.")
+                } else {
+                    RoundControl(symbol: "checkmark", label: "Accept",
+                                 tint: DesignTokens.openDoor) { door.openDoor() }
+                        .disabled(door.isAdmitting)
+                }
             }
         }
         .task {

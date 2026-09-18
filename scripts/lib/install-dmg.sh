@@ -1,0 +1,195 @@
+#!/bin/zsh
+# Shared source for the website, source installer and DMG installer.
+doorbell_require_hardware() {
+  [[ "$(uname -s)" == Darwin ]] || { echo 'Doorbell is macOS only.' >&2; return 1; }
+  local major="${$(sw_vers -productVersion)//.*}"
+  (( major >= 15 )) || { echo 'Doorbell requires macOS 15 or later.' >&2; return 1; }
+  [[ "$(uname -m)" == arm64 ]] || { echo 'Doorbell requires an Apple silicon Mac.' >&2; return 1; }
+}
+# Ad-hoc beta builds still carry a verifiable code signature; never re-sign a
+# download to hide broken contents. Signed installations keep their publisher.
+doorbell_signature_kind() {
+  local info team
+  info="$(codesign -dv --verbose=4 "$1" 2>&1)" || return 1
+  if print -r -- "$info" | /usr/bin/grep -F -x 'Signature=adhoc' >/dev/null; then
+    print -r -- adhoc
+    return 0
+  fi
+  team="$(print -r -- "$info" | /usr/bin/awk -F= '$1 == "TeamIdentifier" {print $2}')"
+  [[ "$team" =~ '^[A-Z0-9]{10}$' ]] || return 1
+  print -r -- "signed:$team"
+}
+doorbell_validate_app() {
+  local app="$1" kind
+  [[ -x "$app/Contents/MacOS/Doorbell" && -f "$app/Contents/Resources/.env" ]] || { echo 'Incomplete Doorbell.app.' >&2; return 1; }
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" == dev.vag.doorbell ]] || return 1
+  codesign --verify --deep --strict "$app" || return 1
+  kind="$(doorbell_signature_kind "$app")" || { echo 'Unsupported app signature. Existing app was kept.' >&2; return 1; }
+  if [[ "$kind" != adhoc || "${DOORBELL_ALLOW_UNSIGNED:-0}" != 1 ]]; then
+    spctl --assess --type execute "$app" || {
+      echo 'This build is not approved by macOS. Use the official Doorbell beta installer for the private beta.' >&2
+      return 1
+    }
+  fi
+}
+doorbell_config_value() {
+  /usr/bin/awk -v key="$2" 'index($0, key "=") == 1 { sub(/^[^=]*=/, ""); print; exit }' "$1/Contents/Resources/.env"
+}
+doorbell_validate_update() {
+  local current="$1" incoming="$2" current_backend incoming_backend current_url incoming_url kind team
+  codesign --verify --deep --strict "$current" || return 1
+  kind="$(doorbell_signature_kind "$current")" || { echo 'Unsupported installed app signature. Existing app was kept.' >&2; return 1; }
+  if [[ "$kind" == signed:* ]]; then
+    # An accepted beta policy must never downgrade a Developer ID installation.
+    DOORBELL_ALLOW_UNSIGNED=0 doorbell_validate_app "$incoming" || return 1
+    team="${kind#signed:}"
+    codesign --verify --deep --strict -R "anchor apple generic and identifier \"dev.vag.doorbell\" and certificate leaf[subject.OU] = \"$team\"" "$incoming" || {
+      echo 'Update publisher does not match the installed app. Existing app was kept.' >&2
+      return 1
+    }
+  elif [[ "$kind" == adhoc && "${DOORBELL_ALLOW_UNSIGNED:-0}" == 1 ]]; then
+    # Official HTTPS release assets + their SHA-256 establish beta provenance.
+    # Bundle integrity, backend identity, and exact release version still apply.
+    doorbell_validate_app "$incoming" || return 1
+  else
+    echo 'This private beta uses the official Doorbell installer to update. Existing app was kept.' >&2
+    return 1
+  fi
+  current_backend="$(doorbell_config_value "$current" DOORBELL_BACKEND)"
+  incoming_backend="$(doorbell_config_value "$incoming" DOORBELL_BACKEND)"
+  [[ -n "$current_backend" && "$current_backend" == "$incoming_backend" ]] || {
+    echo 'Update changes the account service. Existing app was kept.' >&2; return 1
+  }
+  case "$current_backend" in
+    convex) current_url="$(doorbell_config_value "$current" CONVEX_URL)"; incoming_url="$(doorbell_config_value "$incoming" CONVEX_URL)" ;;
+    supabase) current_url="$(doorbell_config_value "$current" SUPABASE_URL)"; incoming_url="$(doorbell_config_value "$incoming" SUPABASE_URL)" ;;
+    *) echo 'Unsupported account service for automatic updates.' >&2; return 1 ;;
+  esac
+  while [[ "$current_url" == */ ]]; do current_url="${current_url%/}"; done
+  while [[ "$incoming_url" == */ ]]; do incoming_url="${incoming_url%/}"; done
+  [[ -n "$current_url" && "$current_url" == "$incoming_url" ]] || {
+    echo 'Update points to a different account database. Existing app and login were kept.' >&2; return 1
+  }
+}
+doorbell_is_running() {
+  ps -ax -o comm= | /usr/bin/grep -F -x "$1/Contents/MacOS/Doorbell" >/dev/null
+}
+doorbell_launch_app() {
+  local app="$1"
+  open "$app" || return 1
+  local attempt stable=0
+  for attempt in {1..8}; do
+    sleep 1
+    if doorbell_is_running "$app"; then
+      (( stable += 1 ))
+      if (( stable >= 5 )); then return 0; fi
+    elif (( stable > 0 )); then
+      break
+    fi
+  done
+  echo 'Doorbell did not stay running. Check System Settings → Privacy & Security.' >&2
+  return 1
+}
+doorbell_swap_bundles() { "$1" "$2" "$3"; }
+doorbell_install_bundle() (
+  set -euo pipefail
+  local source="$1" app="${DOORBELL_APP:-/Applications/Doorbell.app}"
+  doorbell_require_hardware || exit $?
+  [[ "$app" == /*/Doorbell.app && ! -L "$app" ]] || { echo 'Destination must be an absolute Doorbell.app path, not a symlink.' >&2; exit 1; }
+  [[ -d "${app:h}" && ! -L "${app:h}" ]] || { echo 'Destination folder must already exist.' >&2; exit 1; }
+  # Canonical path also makes the exact executable check reliable.
+  app="$(cd "${app:h}" && pwd -P)/Doorbell.app"
+  if doorbell_is_running "$app"; then echo 'Quit Doorbell, then run the installer again.' >&2; exit 1; fi
+  local lock="${app:h}/.${app:t}.install-lock" lockfd stage="" backup="" swap="" candidate_inode="" installed=0 completed=0
+  [[ ! -L "$lock" ]] || { echo 'Invalid installer lock.' >&2; exit 1; }
+  umask 077
+  : >> "$lock"
+  zmodload zsh/system
+  zsystem flock -t 0 -f lockfd "$lock" || { echo 'Another installation is running. Try again after it finishes.' >&2; exit 1; }
+  # The kernel releases this lock after a crash; keep the inode for future waiters.
+  cleanup() {
+    local result=$?
+    set +e
+    if (( ! completed )); then
+      if [[ -n "$backup" && -d "$backup" ]]; then
+        # A signal can land immediately after the atomic exchange. Inspect the
+        # directory inode instead of relying on a later shell assignment.
+        if [[ "$(/usr/bin/stat -f '%i' "$app" 2>/dev/null)" == "$candidate_inode" ]] && ! doorbell_swap_bundles "$swap" "$backup" "$app"; then
+          echo "Could not restore automatically. Your previous app is safe at $backup" >&2
+          stage="" # Preserve the working copy for manual recovery.
+          result=1
+        fi
+      elif (( installed )); then
+        rm -rf "$app"
+      fi
+    fi
+    [[ -z "$stage" ]] || rm -rf "$stage"
+    return $result
+  }
+  trap cleanup EXIT
+  trap 'exit 130' INT TERM HUP
+  stage=$(mktemp -d "${app:h}/.doorbell-install.XXXXXX") || exit $?
+  echo '→ validate and stage Doorbell'
+  doorbell_validate_app "$source" || exit $?
+  if [[ -e "$app" ]]; then doorbell_validate_update "$app" "$source" || exit $?; fi
+  ditto "$source" "$stage/Doorbell.app" || exit $?
+  doorbell_validate_app "$stage/Doorbell.app" || exit $?
+  # The accepted ad-hoc beta flow clears quarantine on the staged copy only.
+  # Preserve incoming signatures; signed builds still use normal Gatekeeper.
+  if [[ "${DOORBELL_ALLOW_UNSIGNED:-0}" == 1 && "$(doorbell_signature_kind "$stage/Doorbell.app")" == adhoc ]]; then
+    xattr -cr "$stage/Doorbell.app" || exit $?
+    doorbell_validate_app "$stage/Doorbell.app" || exit $?
+  fi
+  if [[ -e "$app" ]]; then
+    [[ -x "$stage/Doorbell.app/Contents/MacOS/DoorbellSwap" ]] || { echo 'Atomic installer is missing from the update. Existing app was kept.' >&2; exit 1; }
+    # Run the verified staged helper, not a quarantined executable on the DMG.
+    # Keep a separate copy so its path survives both exchange and rollback.
+    swap="$stage/DoorbellSwap"
+    ditto "$stage/Doorbell.app/Contents/MacOS/DoorbellSwap" "$swap" || exit $?
+    candidate_inode="$(/usr/bin/stat -f '%i' "$stage/Doorbell.app")"
+    backup="$stage/Doorbell.app"
+    doorbell_swap_bundles "$swap" "$backup" "$app" || exit $?
+  else
+    mv "$stage/Doorbell.app" "$app" || exit $?
+  fi
+  installed=1
+  if [[ "${DOORBELL_NO_LAUNCH:-0}" != 1 ]]; then doorbell_launch_app "$app" || exit $?; fi
+  completed=1
+  echo "Installed $app"
+)
+doorbell_is_official_release_url() {
+  [[ "$1" == https://github.com/vagdotdev/doorbell/releases/latest/download/Doorbell.dmg ||
+     "$1" =~ '^https://github\.com/vagdotdev/doorbell/releases/download/v?[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9]{4}-[a-fA-F0-9]{3,40}/Doorbell\.dmg$' ]]
+}
+doorbell_install_from_dmg_url() (
+  set -euo pipefail
+  local dmg_url="$1" scratch="" mounted=0
+  doorbell_require_hardware || exit $?
+  [[ "$dmg_url" == https://* ]] || { echo 'Download requires HTTPS.' >&2; exit 1; }
+  # This project distributes an ad-hoc private beta at its official release URL.
+  # Custom mirrors do not acquire that policy implicitly.
+  if doorbell_is_official_release_url "$dmg_url"; then export DOORBELL_ALLOW_UNSIGNED=1; fi
+  scratch=$(mktemp -d "${TMPDIR:-/tmp}/doorbell-download.XXXXXX") || exit $?
+  cleanup() {
+    local result=$?
+    if (( mounted )); then hdiutil detach "$scratch/mount" -quiet || true; fi
+    rm -rf "$scratch"
+    return $result
+  }
+  trap cleanup EXIT
+  trap 'exit 130' INT TERM HUP
+  echo '→ download Doorbell and verify checksum'
+  curl --fail --location --proto '=https' --proto-redir '=https' --retry 2 --connect-timeout 15 --max-time 300 -o "$scratch/Doorbell.dmg" "$dmg_url" || exit $?
+  local expected="${DOORBELL_DMG_SHA256:-}" rest
+  if [[ -z "$expected" ]]; then
+    curl --fail --location --proto '=https' --proto-redir '=https' --retry 2 --connect-timeout 15 --max-time 30 -o "$scratch/checksum" "$dmg_url.sha256" || exit $?
+    read -r expected rest < "$scratch/checksum" || exit $?
+  fi
+  [[ "$expected" =~ '^[a-fA-F0-9]{64}$' ]] || { echo 'Missing or invalid release checksum.' >&2; exit 1; }
+  local actual="$(shasum -a 256 "$scratch/Doorbell.dmg")"
+  [[ "${actual%% *}" == "${expected:l}" ]] || { echo 'Download checksum mismatch. Existing app was kept.' >&2; exit 1; }
+  mkdir "$scratch/mount" || exit $?
+  hdiutil attach "$scratch/Doorbell.dmg" -readonly -nobrowse -mountpoint "$scratch/mount" -quiet || exit $?
+  mounted=1
+  doorbell_install_bundle "$scratch/mount/Doorbell.app" || exit $?
+)

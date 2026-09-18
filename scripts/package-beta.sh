@@ -7,13 +7,15 @@ mkdir -p build/beta
 rm -rf build/beta/Doorbell.app
 ditto build/Doorbell.app build/beta/Doorbell.app
 cp scripts/Install-Doorbell.command 'build/beta/Install Doorbell.command'
+cp scripts/lib/install-dmg.sh build/beta/install-dmg.sh
 chmod +x 'build/beta/Install Doorbell.command'
 cat > build/beta/Readme.txt <<'TEXT'
 Doorbell private beta
 1. Keep Doorbell.app and Install Doorbell.command in the same folder.
-2. Open Install Doorbell.command to install in your Applications folder.
+2. For this unsigned private beta only, run from Terminal in this folder:
+   DOORBELL_ALLOW_UNSIGNED=1 zsh "Install Doorbell.command"
 3. macOS may require you to approve the installer in Privacy & Security.
-This beta is ad-hoc signed, not notarized. The installer removes quarantine only
+This beta is ad-hoc signed, not notarized. The explicit beta override removes quarantine only
 from the copied Doorbell.app. It does not change system-wide security settings.
 Camera, microphone and screen recording still need your permission.
 TEXT

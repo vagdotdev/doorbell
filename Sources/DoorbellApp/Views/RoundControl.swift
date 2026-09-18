@@ -13,23 +13,55 @@ struct RoundControl: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(glyph)
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: DesignTokens.controlSize, height: DesignTokens.controlSize)
-                    .background(Circle().fill(fill))
-                    .shadow(color: tint?.opacity(hovering ? 0.45 : 0.28) ?? .clear, radius: 10, y: 3)
-                Text(label)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(DesignTokens.inkSecondary)
-            }
-            .frame(width: 70)
-            .contentShape(Rectangle())
+            RoundControlLabel(symbol: symbol, label: label, tint: tint, active: active, hovering: hovering)
         }
         .buttonStyle(PressScale())
         .onHover { hovering = $0 }
+    }
+}
+
+/// Same face as `RoundControl`, opening a menu instead of firing one action.
+struct RoundMenuControl<Content: View>: View {
+    let symbol: String
+    let label: String
+    var tint: Color?
+    @ViewBuilder let content: () -> Content
+    @State private var hovering = false
+
+    var body: some View {
+        Menu(content: content) {
+            RoundControlLabel(symbol: symbol, label: label, tint: tint, active: false, hovering: hovering)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(PressScale())
+        .onHover { hovering = $0 }
+        .tint(tint ?? DesignTokens.ink)
+    }
+}
+
+private struct RoundControlLabel: View {
+    let symbol: String
+    let label: String
+    var tint: Color?
+    var active = false
+    var hovering = false
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(glyph)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: DesignTokens.controlSize, height: DesignTokens.controlSize)
+                .background(Circle().fill(fill))
+                .shadow(color: tint?.opacity(hovering ? 0.45 : 0.28) ?? .clear, radius: 10, y: 3)
+            Text(label)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(DesignTokens.inkSecondary)
+        }
+        .frame(width: 70)
+        .contentShape(Rectangle())
     }
 
     private var glyph: Color {

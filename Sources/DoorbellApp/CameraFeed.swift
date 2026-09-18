@@ -14,32 +14,64 @@ final class CameraFeed: ObservableObject {
 
     let session = AVCaptureSession()
     private var refs = 0
+    private var generation = 0
+    private(set) var startTask: Task<Void, Never>?
     private let queue = DispatchQueue(label: "doorbell.camera")
+    private let cameraAccess: @MainActor () async -> Bool
+    private let captureStart: (@MainActor () async -> Bool)?
+    private let captureStop: (@MainActor () -> Void)?
 
-    private init() {}
+    init(cameraAccess: @escaping @MainActor () async -> Bool = {
+        await AVCaptureDevice.requestAccess(for: .video)
+    }, captureStart: (@MainActor () async -> Bool)? = nil,
+         captureStop: (@MainActor () -> Void)? = nil) {
+        self.cameraAccess = cameraAccess
+        self.captureStart = captureStart
+        self.captureStop = captureStop
+    }
 
     func retain() {
         refs += 1
         guard refs == 1 else { return }
+        generation += 1
+        let ticket = generation
         status = .starting
-        Task { await start() }
+        startTask = Task { await start(ticket: ticket) }
     }
 
     func release() {
         refs = max(0, refs - 1)
         guard refs == 0 else { return }
-        let session = self.session
-        queue.async { session.stopRunning() }
+        generation += 1
+        startTask?.cancel()
+        if let captureStop { captureStop() }
+        else {
+            let session = self.session
+            queue.async { session.stopRunning() }
+        }
         status = .idle
     }
 
-    private func start() async {
-        guard await AVCaptureDevice.requestAccess(for: .video) else {
+    private func start(ticket: Int) async {
+        guard refs > 0, generation == ticket else { return }
+        let allowed = await cameraAccess()
+        // The permission sheet can outlive its preview. Its result must not start
+        // capture, or change a newer preview's state, after the old one closes.
+        guard refs > 0, generation == ticket else { return }
+        guard allowed else {
             status = .unavailable
             return
         }
+        let ok: Bool
+        if let captureStart { ok = await captureStart() }
+        else { ok = await startSession() }
+        guard refs > 0, generation == ticket else { return }
+        status = ok ? .running : .unavailable
+    }
+
+    private func startSession() async -> Bool {
         let session = self.session
-        let ok: Bool = await withCheckedContinuation { cont in
+        return await withCheckedContinuation { cont in
             queue.async {
                 if session.inputs.isEmpty {
                     session.beginConfiguration()
@@ -56,8 +88,6 @@ final class CameraFeed: ObservableObject {
                 cont.resume(returning: true)
             }
         }
-        guard refs > 0 else { return }
-        status = ok ? .running : .unavailable
     }
 }
 
@@ -90,7 +120,9 @@ struct LiveVideo: View {
     var fit = false
 
     var body: some View {
-        SwiftUIVideoView(track, layoutMode: fit ? .fit : .fill, mirrorMode: mirrored ? .mirror : .off)
+        // LiveKit's mirror flag is unreliable on macOS; flip the view instead.
+        SwiftUIVideoView(track, layoutMode: fit ? .fit : .fill, mirrorMode: .off)
+            .scaleEffect(x: mirrored ? -1 : 1, y: 1)
             .background(Color(white: 0.08))
     }
 }
@@ -126,5 +158,10 @@ private struct PreviewLayerView: NSViewRepresentable {
 
     func updateNSView(_ view: NSView, context: Context) {
         view.layer?.frame = view.bounds
+        guard let layer = view.layer as? AVCaptureVideoPreviewLayer,
+              let connection = layer.connection,
+              connection.isVideoMirroringSupported else { return }
+        connection.automaticallyAdjustsVideoMirroring = false
+        connection.isVideoMirrored = mirrored
     }
 }

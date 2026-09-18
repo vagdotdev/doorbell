@@ -3,6 +3,7 @@ import SwiftUI
 /// Find a friend by handle and send a request.
 struct SearchView: View {
     @EnvironmentObject private var hallway: HallwayStore
+    @EnvironmentObject private var door: DoorController
     @State private var query = ""
     @State private var results: [Profile] = []
     @State private var searched = false
@@ -64,12 +65,19 @@ struct SearchView: View {
     }
 
     private var hint: String {
-        if query.trimmingCharacters(in: .whitespaces).count < 2 { return "" }
+        if hallway.account != .ready { return "Finish setup first" }
+        if query.trimmingCharacters(in: .whitespaces).count < 2 { return "Type at least 2 characters" }
         return searched ? "No Results" : ""
     }
 
     @ViewBuilder
     private func trailing(for person: Profile) -> some View {
+        if person.openDoorPolicy, let friend = hallway.doors.first(where: { $0.id == person.id }) {
+            PillButton(title: "Walk In", prominent: true) {
+                door.visit(friend)
+            }
+            .help("Their door is open to friends. Quiet Door or another call may pause entry.")
+        } else {
         switch hallway.relationship(to: person) {
         case .none:
             if hallway.requests.contains(where: { $0.id == person.id }) {
@@ -85,6 +93,7 @@ struct SearchView: View {
             Text("Friends")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(DesignTokens.inkSecondary)
+        }
         }
     }
 

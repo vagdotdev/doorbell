@@ -19,4 +19,15 @@ class ConfigTests(unittest.TestCase):
   for url in ['http://example.com','https://localhost','https://127.0.0.1','https://mac.local']:
    with self.assertRaises(ValueError): m.client_config(self.config(url=url))
  def test_debug_mock_explicit(self): self.assertEqual(m.client_config('',local=True),'')
+ def test_convex_release_never_exports_credentials(self):
+  output=m.client_config('DOORBELL_BACKEND=convex\nCONVEX_URL=https://test.convex.cloud\nDOORBELL_JOIN_SECRET=shared\nCONVEX_DEPLOY_KEY=admin\nLIVEKIT_API_SECRET=private')
+  self.assertEqual(output, 'DOORBELL_BACKEND=convex\nCONVEX_URL=https://test.convex.cloud\n')
+ def test_both_backends_refuse_private_or_credential_urls(self):
+  for url in ['http://public.example.com', 'https://192.168.1.2', 'https://10.0.0.1', 'https://[::1]', 'https://169.254.169.254', 'https://host.local', 'https://user:pass@host.com', 'https://host.com?secret=x', 'https://host.com:invalid']:
+   for backend in ['convex','supabase']:
+    text='DOORBELL_BACKEND=convex\nCONVEX_URL='+url if backend=='convex' else self.config(url=url)
+    with self.subTest(url=url,backend=backend), self.assertRaises(ValueError): m.client_config(text)
+ def test_convex_local_requires_valid_http_url(self):
+  self.assertIn('127.0.0.1',m.client_config('DOORBELL_BACKEND=convex\nCONVEX_URL=http://127.0.0.1:3210',local=True))
+  with self.assertRaises(ValueError): m.client_config('DOORBELL_BACKEND=convex\nCONVEX_URL=file:///tmp/server',local=True)
 if __name__=='__main__': unittest.main()

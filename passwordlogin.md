@@ -1,0 +1,8 @@
+- Keep handle-only login for this beta.
+- Later: handle + personal password, minimum 8 characters.
+- Existing signed-in users set a password on their current account after updating.
+- Preserve account ID, handle, friends, settings and saved sessions; never create a replacement account.
+- Verify account ownership before migrating or recovering a signed-out legacy account; a handle alone is not proof.
+- After migration, disable shared-password access for that account.
+- Add password reset and test upgrade/recovery before rollout.
+- Keep the password form, submit button and “by vagdev” footer clearly separated.

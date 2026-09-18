@@ -9,6 +9,8 @@ final class RoomSession: ObservableObject {
     @Published private(set) var host = ""
     @Published private(set) var isActive = false
     @Published private(set) var participants: [RoomParticipant] = []
+    static let capacity = 5
+    var isFull: Bool { isActive && participants.count >= Self.capacity }
     var micOn: Bool { media.micOn }
     var camOn: Bool { media.camOn }
     var sharing: Bool { media.sharing }
@@ -22,6 +24,7 @@ final class RoomSession: ObservableObject {
 
     private(set) var me: Profile?
     let media: MediaSession
+    private let isLive: Bool
     /// Synchronously invalidates pending work when the window closes.
     var onLeave: (() -> Void)?
 
@@ -29,18 +32,25 @@ final class RoomSession: ObservableObject {
     private var others: [Profile] = []
     private var mediaSink: AnyCancellable?
 
-    init(media: MediaSession) {
+    init(media: MediaSession, isLive: Bool = AppConfig.current.isLive,
+         onIncomingMessage: @escaping () -> Void = { Sounds.chatMessage() }) {
+        self.isLive = isLive
         self.media = media
         mediaSink = media.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.objectWillChange.send(); self?.rebuild() } }
         media.onData = { [weak self] data, topic, from in
-            guard topic == "chat", data.count <= 4_000, let self, self.isActive, let text = String(data: data, encoding: .utf8) else { return }
+            guard topic == "chat", data.count <= 4_000,
+                  let self, self.isActive,
+                  let from, !from.isEmpty, from != self.me?.handle, from != self.me?.id,
+                  let text = String(data: data, encoding: .utf8),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             let sender = self.participants.first { $0.id == from }?.profile
-                ?? Profile(id: from ?? "?", handle: from ?? "?", displayName: from ?? "Someone", avatarURL: nil)
+                ?? Profile(id: from, handle: from, displayName: from, avatarURL: nil)
             self.chat.append(ChatMessage(from: sender, text: text))
             if self.chat.count > 200 { self.chat.removeFirst(self.chat.count - 200) }
             if !self.chatOpen { self.unread += 1 }
+            onIncomingMessage()
         }
     }
 
@@ -94,7 +104,7 @@ final class RoomSession: ObservableObject {
         }
         let ticket = sessionID
         do {
-            if AppConfig.current.useSupabase { try await media.send(Data(trimmed.utf8), topic: "chat") }
+            if isLive { try await media.send(Data(trimmed.utf8), topic: "chat") }
             guard isActive, ticket == sessionID else { return false }
             chat.append(ChatMessage(from: me, text: trimmed))
             if chat.count > 200 { chat.removeFirst(chat.count - 200) }
@@ -135,7 +145,7 @@ final class RoomSession: ObservableObject {
                     via: peer.via.flatMap { ($0 == me.handle || $0 == peer.id || known != nil) ? nil : $0 },
                     video: peer.video)
             }
-        } else if !AppConfig.current.useSupabase {
+        } else if !isLive {
             list += others.map { RoomParticipant(id: $0.id, profile: $0, isLocal: false, isHost: $0.handle == host) }
         }
         if list != participants { participants = list }

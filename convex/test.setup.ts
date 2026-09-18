@@ -2,12 +2,15 @@
 import { convexTest } from "convex-test";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { register } from "convex-api-keys/test";
 
 // Everything convex-test needs to run the functions in this directory.
 export const modules = import.meta.glob("./**/*.*s");
 
 export function backend() {
-  return convexTest(schema, modules);
+  const t = convexTest(schema, modules);
+  register(t);
+  return t;
 }
 
 type T = ReturnType<typeof backend>;

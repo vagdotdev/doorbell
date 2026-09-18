@@ -54,6 +54,11 @@ actor MockBackend: DoorbellBackend {
         save()
     }
 
+    func setOpenDoorPolicy(_ enabled: Bool) async throws {
+        graph.me.openDoorPolicy = enabled
+        save()
+    }
+
     func setAvatar(jpegOrPng: Data, contentType: String) async throws {
         guard !jpegOrPng.isEmpty else { throw BackendError.badAvatar }
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -131,7 +136,8 @@ actor MockBackend: DoorbellBackend {
     // The mock has no second user, so it treats close friendship as mutual:
     // if they're on my list, pretend I'm on theirs.
     func visit(_ id: Profile.ID, visitID: UUID) async throws -> Visit {
-        Visit(mode: graph.closeFriends.contains(id) ? .walkIn : .knock, grant: nil)
+        guard graph.following[id] == .accepted else { throw BackendError.noSuchDoor }
+        return Visit(mode: (graph.closeFriends.contains(id) || graph.people.first(where: { $0.id == id })?.openDoorPolicy == true) ? .walkIn : .knock, grant: nil)
     }
 
     func leaveVisit(_ id: Profile.ID, visitID: UUID) async {}

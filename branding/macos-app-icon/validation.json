@@ -1,0 +1,70 @@
+{
+  "png_variants": [
+    {
+      "filename": "icon_16x16.png",
+      "pixels": 16,
+      "scale": 1,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_16x16@2x.png",
+      "pixels": 32,
+      "scale": 2,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_32x32.png",
+      "pixels": 32,
+      "scale": 1,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_32x32@2x.png",
+      "pixels": 64,
+      "scale": 2,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_128x128.png",
+      "pixels": 128,
+      "scale": 1,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_128x128@2x.png",
+      "pixels": 256,
+      "scale": 2,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_256x256.png",
+      "pixels": 256,
+      "scale": 1,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_256x256@2x.png",
+      "pixels": 512,
+      "scale": 2,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_512x512.png",
+      "pixels": 512,
+      "scale": 1,
+      "transparent_corners": true
+    },
+    {
+      "filename": "icon_512x512@2x.png",
+      "pixels": 1024,
+      "scale": 2,
+      "transparent_corners": true
+    }
+  ],
+  "icns_roundtrip": "10 representations: correct dimensions, identical alpha and opaque RGB; 8 modern PNG entries match all RGBA pixels",
+  "legacy_encoding": "Native iconutil 16px/32px RGB+mask entries differ only in translucent-edge RGB after PNG re-export.",
+  "xcode_actool": "compiled successfully for macOS",
+  "color_profile": "sRGB",
+  "master_pixels": 1024,
+  "artwork": "Original approved RGB; extracted and normalized outer alpha only."
+}

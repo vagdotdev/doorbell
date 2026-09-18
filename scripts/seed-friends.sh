@@ -7,6 +7,24 @@ Same credentials the Mac app uses for name-yourself join:
   scripts/seed-friends.sh
 """
 import json, os, sys, urllib.error, urllib.request
+from pathlib import Path
+
+def load_dotenv(path):
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key, val = key.strip(), val.strip().strip("\"'")
+        if key and key not in os.environ:
+            os.environ[key] = val
+
+root = Path(__file__).resolve().parents[1]
+load_dotenv(root / ".env")
+load_dotenv(root / ".env.local")
+load_dotenv(root / ".env.secrets")
 
 U = os.environ.get("CONVEX_URL", "http://127.0.0.1:3210")
 SECRET = os.environ.get("DOORBELL_JOIN_SECRET", "doorbell")

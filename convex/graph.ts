@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { closeFriendEdge, followEdge, follows, profileValidator, publicProfile, requireProfile } from "./lib";
 
@@ -120,6 +121,7 @@ export const unfollow = mutation({
     if (edge !== null) await removeFollow(ctx, edge._id, me._id, args.profileId);
     const reverse = await followEdge(ctx, args.profileId, me._id);
     if (reverse !== null) await removeFollow(ctx, reverse._id, args.profileId, me._id);
+    await ctx.runMutation(internal.doors.cancelFriendshipVisits, { profileId: args.profileId });
     return null;
   },
 });

@@ -9,11 +9,9 @@ struct BuildingView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 18) {
                 if let me = hallway.me {
-                    OwnDoorCard(me: me, requests: hallway.requests.count) {
-                        state.mode = .requests
-                    }
+                    OwnDoorCard(me: me)
                 }
-                ForEach(hallway.doors) { door in
+                ForEach(hallway.orderedDoors) { door in
                     DoorCard(door: door)
                 }
                 AddDoorCard { state.mode = .search }
@@ -21,6 +19,8 @@ struct BuildingView: View {
             .padding(.horizontal, 22)
         }
         .scrollClipDisabled()
+        .animation(.spring(response: 0.45, dampingFraction: 0.82),
+                   value: hallway.orderedDoors.map(\.id))
         .frame(maxHeight: .infinity)
     }
 }
@@ -49,6 +49,8 @@ private struct DoorCard: View {
                                 .padding(-4)
                         }
                     }
+                    // Hover: the glass comes forward, in the one cold light.
+                    .shadow(color: DesignTokens.horizon.opacity(hovering ? 0.28 : 0), radius: 12)
                     .buildingAvatar(door.profile.id)
                 VStack(spacing: 1) {
                     Text(firstName)
@@ -74,14 +76,10 @@ private struct DoorCard: View {
             .tint(DesignTokens.openDoor)
             .disabled(!door.followsMe)
             Text("Friends knock. Close friends just get in.")
-            if !door.followsMe {
+            if door.followsMe {
                 Text("Available once you're friends")
             }
-            if door.followsMe {
-                Button("Remove Follower", role: .destructive) { hallway.removeFollower(door.profile) }
-            }
-            Divider()
-            Button("Remove Friend", role: .destructive) {
+            Button("Remove friend", role: .destructive) {
                 hallway.unfollow(door.profile)
             }
             #if DEBUG
@@ -99,41 +97,26 @@ private struct DoorCard: View {
 
 private struct OwnDoorCard: View {
     let me: Profile
-    let requests: Int
-    let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 7) {
-                AvatarView(profile: me, size: avatarSize)
-                    .overlay(alignment: .topTrailing) {
-                        if requests > 0 {
-                            Text("\(requests)")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(.black)
-                                .frame(minWidth: 18, minHeight: 18)
-                                .background(Circle().fill(DesignTokens.social))
-                                .overlay(Circle().strokeBorder(.black, lineWidth: 2))
-                                .offset(x: 4, y: -3)
-                        }
-                    }
-                    .buildingAvatar(me.id)
-                VStack(spacing: 1) {
-                    Text("You")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(DesignTokens.ink)
-                    Text("@\(me.handle)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(DesignTokens.inkTertiary)
-                }
-                .lineLimit(1)
+        VStack(spacing: 7) {
+            AvatarView(profile: me, size: avatarSize)
+                .shadow(color: DesignTokens.horizon.opacity(hovering ? 0.28 : 0), radius: 12)
+                .buildingAvatar(me.id)
+            VStack(spacing: 1) {
+                Text("You")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DesignTokens.ink)
+                Text("@\(me.handle)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(DesignTokens.inkTertiary)
             }
-            .frame(width: cardWidth)
-            .scaleEffect(hovering ? 1.05 : 1)
-            .animation(DesignTokens.spring, value: hovering)
+            .lineLimit(1)
         }
-        .buttonStyle(.plain)
+        .frame(width: cardWidth)
+        .scaleEffect(hovering ? 1.05 : 1)
+        .animation(DesignTokens.spring, value: hovering)
         .onHover { hovering = $0 }
     }
 }

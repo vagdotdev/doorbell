@@ -6,7 +6,11 @@ first thing a new person sees should be a real app, once, that explains itself i
 ten seconds and then gets out of the way. After that the notch is the product and
 the window is where settings live.
 
-Not built yet. This is the spec so it is built once.
+Section 1 is built (`Sources/DoorbellApp/Onboarding/`): the window opens whenever there is
+no account — first launch, sign-out, expired session — and the notch only offers a way back
+to it. While it is up the app is a regular app (Dock icon, menu bar); on Done it goes back
+to being the notch, and the board opens once on its own so the intro can play. The pitch
+animation is still the placeholder described below. Sections 2–3 are not built.
 
 ## 1. First run
 

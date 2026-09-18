@@ -3,7 +3,7 @@ import SwiftUI
 /// The intro. The board opens on a black sky; the doorstep dome rises from the floor;
 /// your friends surface through its glass as small peepholes and float up into a plume
 /// while "Doorbell" comes into focus. Then every peephole glides to its place in the
-/// building and the sky clears. Plays once per launch. Click anywhere to skip.
+/// building and the sky clears. Plays each time the board opens. Click anywhere to skip.
 ///
 /// Built from what the shell already has — starfield, doorstep, avatars — so it costs
 /// nothing new to draw. Under Reduce Motion the plume is skipped and it fades.
@@ -174,6 +174,131 @@ struct SplashView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(560))
             state.splash = .done
+        }
+    }
+}
+
+// MARK: - Onboarding plume
+
+/// Same peephole plume as the notch intro, sized for the onboarding window. No copy.
+struct IntroPlumeView: View {
+    let me: Profile
+    let friends: [Profile]
+    var onFinished: (() -> Void)?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var risen = false
+    @State private var placed: Set<String> = []
+    @State private var finishing = false
+    @State private var settling = false
+
+    private static let size = CGSize(width: 480, height: 200)
+    private static let rise: CGFloat = 34
+    private static let maxFriends = 8
+
+    private var people: [Profile] { [me] + Array(friends.prefix(Self.maxFriends)) }
+
+    var body: some View {
+        ZStack {
+            ZStack {
+                Color.black
+                Starfield(intensity: 0.9, seed: 3)
+                Doorstep(rise: risen ? Self.rise : 0, lit: !settling)
+            }
+            .opacity(settling ? 0 : 1)
+            plume
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: finish)
+        .task { await play() }
+    }
+
+    private var plume: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: settling || reduceMotion)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(Array(people.enumerated()), id: \.element.id) { index, person in
+                    peephole(person, index: index, time: t)
+                }
+            }
+        }
+    }
+
+    private func peephole(_ person: Profile, index: Int, time t: TimeInterval) -> some View {
+        let isPlaced = placed.contains(person.id)
+        let home = home(for: index)
+        let crown = CGPoint(x: Self.size.width / 2, y: Self.size.height - Self.rise + 6)
+        let side = diameter(for: index)
+        let breath: CGFloat = isPlaced && !settling && !reduceMotion
+            ? CGFloat(sin(t * (0.9 + 0.13 * Double(index)) + Double(index) * 1.7)) * 2.2
+            : 0
+
+        return AvatarView(profile: person, size: side)
+            .overlay {
+                ZStack {
+                    Circle().fill(RadialGradient(
+                        colors: [.clear, .black.opacity(0.42)],
+                        center: .center, startRadius: side * 0.28, endRadius: side * 0.5))
+                    Circle().strokeBorder(.black, lineWidth: 2.5)
+                    Circle().strokeBorder(DesignTokens.horizon.opacity(0.55), lineWidth: 1)
+                    Circle().fill(.white.opacity(0.7))
+                        .frame(width: 3, height: 3)
+                        .offset(x: -side * 0.28, y: -side * 0.3)
+                }
+                .opacity(settling ? 0 : 1)
+            }
+            .scaleEffect(isPlaced ? 1 : 0.3)
+            .opacity(isPlaced ? 1 : 0)
+            .position(x: isPlaced ? home.x : crown.x, y: (isPlaced ? home.y : crown.y) + breath)
+    }
+
+    private func home(for index: Int) -> CGPoint {
+        let crownY = Self.size.height - Self.rise
+        guard index > 0 else { return CGPoint(x: Self.size.width / 2, y: crownY - 28) }
+        let n = max(people.count - 1, 1)
+        let t = CGFloat(index) / CGFloat(n + 1)
+        let sideSign: CGFloat = index.isMultiple(of: 2) ? 1 : -1
+        let x = Self.size.width / 2 + sideSign * (32 + 130 * t)
+        let y = crownY - 38 - 100 * t
+        return CGPoint(x: x, y: y)
+    }
+
+    private func diameter(for index: Int) -> CGFloat {
+        guard index > 0 else { return 44 }
+        var h: UInt32 = 2166_136_261
+        for b in people[index].handle.utf8 { h = (h ^ UInt32(b)) &* 16_777_619 }
+        return [32, 36, 40][Int(h % 3)]
+    }
+
+    private func play() async {
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.3)) { risen = true }
+            placed = Set(people.map(\.id))
+            try? await Task.sleep(for: .milliseconds(900))
+            finish()
+            return
+        }
+        let start = ContinuousClock.now
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.82)) { risen = true }
+        try? await Task.sleep(for: .milliseconds(200))
+        for person in people {
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.72, dampingFraction: 0.7)) { _ = placed.insert(person.id) }
+            try? await Task.sleep(for: .milliseconds(75))
+        }
+        try? await Task.sleep(until: start + SplashView.holdUntil, clock: .continuous)
+        guard !Task.isCancelled else { return }
+        finish()
+    }
+
+    private func finish() {
+        guard !finishing else { return }
+        finishing = true
+        withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) { settling = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(560))
+            onFinished?()
         }
     }
 }

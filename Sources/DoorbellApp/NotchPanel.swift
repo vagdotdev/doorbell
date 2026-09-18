@@ -15,6 +15,8 @@ final class NotchPanel: NSPanel {
     private var hoverMonitors: [Any] = []
     private var settleTask: Task<Void, Never>?
     private var accountSink: AnyCancellable?
+    private var onboarding: OnboardingWindowController?
+    private var holdTask: Task<Void, Never>?
 
     init() {
         let config = AppConfig.current
@@ -55,20 +57,24 @@ final class NotchPanel: NSPanel {
         contentView = host.fillingContainer()
         state.onKindChange = { [weak self] kind in
             self?.resize(to: kind)
-            // Opening the building is the moment to catch up on accepts and requests.
-            if kind == .board, let hallway = self?.hallway { Task { await hallway.refresh() } }
+            if kind == .board, let self {
+                Task { @MainActor in
+                    await self.hallway.refresh()
+                    self.state.splash = self.hallway.orderedDoors.isEmpty ? .pending : .done
+                }
+            }
         }
         state.onModeChange = { [weak self] mode in
             // Typing needs key status; a non-activating panel gets it without stealing the app.
-            if mode == .search || mode == .account { self?.makeKey() }
+            if mode == .search { self?.makeKey() }
         }
-        // Signed out → the board is the sign-in form and stays open. Ready → let go.
+        state.onSetupRequested = { [weak self] in self?.presentOnboarding() }
+        // No account (first launch, signed out, session expired) → a real window asks
+        // who you are. The notch never hosts that form.
         accountSink = hallway.$account.removeDuplicates().sink { [weak self] account in
             guard let self else { return }
-            if account != .ready {
-                state.mode = .account
-            } else if state.mode == .account {
-                state.mode = .building
+            if account == .signedOut || account == .needsHandle {
+                presentOnboarding()
             }
         }
 
@@ -78,6 +84,10 @@ final class NotchPanel: NSPanel {
         guard ProcessInfo.processInfo.environment["DOORBELL_SNAPSHOT"] == nil else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor [weak self] in self?.state.unpin() }
+        }
+        // First launch: show the window immediately — don't wait for async account refresh.
+        if !AppConfig.hasStoredSession {
+            DispatchQueue.main.async { [weak self] in self?.presentOnboarding() }
         }
         // Hover, from the pointer's position against the window — the one thing that
         // reports reliably while some other app is frontmost. Global covers other apps'
@@ -102,6 +112,36 @@ final class NotchPanel: NSPanel {
 
     // Lets the search field take keyboard focus without activating the app.
     override var canBecomeKey: Bool { true }
+
+    private func presentOnboarding() {
+        // Screenshots of the board must not be covered by the window.
+        guard ProcessInfo.processInfo.environment["DOORBELL_NO_ONBOARDING"] == nil else { return }
+        if onboarding == nil {
+            onboarding = OnboardingWindowController(hallway: hallway) { [weak self] in
+                self?.showBoardOnce()
+            }
+        }
+        onboarding?.present()
+    }
+
+    var doorForUpdates: DoorController { door }
+
+    func reopen() {
+        if hallway.account == .ready { showBoardOnce(); orderFrontRegardless() }
+        else { presentOnboarding() }
+    }
+
+    /// The notch introduces itself once the window is gone: the board opens on its own
+    /// for a few seconds (the intro plays), then goes quiet until hovered.
+    private func showBoardOnce() {
+        holdTask?.cancel()
+        state.heldOpen = true
+        holdTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(7))
+            guard !Task.isCancelled else { return }
+            self?.state.heldOpen = false
+        }
+    }
 
     func show() {
         orderFrontRegardless()

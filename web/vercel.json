@@ -1,0 +1,18 @@
+{
+  "framework": null,
+  "buildCommand": "",
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/install", "destination": "/install.sh" },
+    { "source": "/update", "destination": "/update.sh" }
+  ],
+  "headers": [
+    {
+      "source": "/(install|update|install\\.sh|update\\.sh)",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=300" }
+      ]
+    }
+  ]
+}

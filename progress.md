@@ -22,8 +22,14 @@ Shelf lives as a diamond in the board's bottom-right corner (toggles what's insi
 your door, with a crossfade). Close-friend ring is green; the walk-ins menu reads
 "Friends knock. Close friends just get in." Glass setting previews the shapes.
 
-Now: keep `npm run dev` + `livekit-server --dev` running; friends Join with a name + @handle. Cloud: `npx convex login` + deploy when you want it off this Mac. See README → "Real backend, locally (Convex)".
+Done: name changes capped at 2 per rolling 14 days (server + Settings hint). Selfie video mirrored on macOS. `convex-api-keys` component installed. LiveKit Cloud on Convex (`doorbell-t59irnxk.livekit.cloud`). `scripts/setup-local.sh` wires `.env` + `.env.secrets` → Convex; auth-gated `apiKeyMgmt`.
 
-Next: utilities, first-launch window (`docs/first-launch.md`), ship. Supabase stack is legacy beside Convex.
+Done: a real app. App icon (the approved pinhole from `branding/macos-app-icon` → `Assets/AppIcon.icns`; Finder, the Dock during first launch, permission prompts). First launch is a window (`Onboarding/`): peephole plume → name + permanent @handle → camera/mic → Done; the notch never hosts the form. Board replays the splash each open; friends sort left→right by missed/recent knocks. Shelf + requests icons bottom-right; "by vagdev" footer. Live mode skips bundled demo portraits. `scripts/update.sh` pull + reinstall.
+
+Done: occupied knock is Add to this call / End this call (`docs/bring-in-plan.md`).
+
+Now: six-hour notch moon, friends-only Open Door, mic fixes and xattr-beta updater under QA. Handle-only login stays; later: `passwordlogin.md`.
+
+Next: utilities, app window for settings (`docs/first-launch.md` §3), ship. Supabase stack is legacy beside Convex.
 
 Details: `what this is.md`, `docs/how-it-works.md`, `docs/plan.md`, `docs/convex.md`.

@@ -12,7 +12,10 @@ export default defineSchema({
     userId: v.id("users"),
     handle: v.string(),
     displayName: v.string(),
+    openDoorPolicy: v.optional(v.boolean()),
     avatarStorageId: v.optional(v.id("_storage")),
+    /// Milliseconds since epoch. Rolling 14-day window; at most two renames.
+    displayNameChangedAt: v.optional(v.array(v.number())),
   })
     .index("by_user", ["userId"])
     .index("by_handle", ["handle"])
@@ -37,9 +40,25 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_pair", ["ownerId", "memberId"]),
 
+  avatarUploads: defineTable({ storageId: v.id("_storage"), ownerId: v.id("profiles") })
+    .index("by_storageId", ["storageId"]),
+
+  // Ephemeral call handoff, never online presence. Expired by scheduled mutation.
+  visits: defineTable({
+    visitId: v.string(),
+    ownerId: v.id("profiles"),
+    guestId: v.id("profiles"),
+    mode: v.union(v.literal("knock"), v.literal("walk_in")),
+    status: v.union(v.literal("prepared"), v.literal("announced"), v.literal("admitted"), v.literal("canceled")),
+    expiresAt: v.number(),
+  }).index("by_visitId", ["visitId"]).index("by_guestId", ["guestId"])
+    .index("by_ownerId", ["ownerId"])
+    .index("by_ownerId_and_status", ["ownerId", "status"]),
+
   // The knock signal. Written only by door actions, read only by `to`, deleted on
   // receipt or by the sweep. `admitted` carries the guest's seat; nothing else does.
   doorEvents: defineTable({
+    visitId: v.optional(v.string()), // absent only on pre-upgrade events; never delivered
     toProfileId: v.id("profiles"),
     fromProfileId: v.id("profiles"),
     kind: v.union(

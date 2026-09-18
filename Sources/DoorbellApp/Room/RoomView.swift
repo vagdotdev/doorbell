@@ -5,6 +5,7 @@ import SwiftUI
 struct RoomView: View {
     @EnvironmentObject private var room: RoomSession
     @EnvironmentObject private var door: DoorController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,11 +27,11 @@ struct RoomView: View {
             if room.peopleOpen {
                 PeopleDrawer()
                     .frame(width: 300)
-                    .transition(.move(edge: .trailing))
+                    .transition(drawerTransition)
             } else if room.chatOpen {
                 ChatDrawer()
                     .frame(width: 300)
-                    .transition(.move(edge: .trailing))
+                    .transition(drawerTransition)
             }
         }
         .background(RoomBackdrop())
@@ -40,15 +41,19 @@ struct RoomView: View {
                 AtTheDoor(visitor: visitor)
                     .padding(.top, 8)
                     .padding(.trailing, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .offset(y: -6).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.chatOpen)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: room.peopleOpen)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: door.visitor)
+        .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.chatOpen)
+        .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.peopleOpen)
+        .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.2), value: door.visitor)
         .sheet(isPresented: $room.sharePickerOpen) { SharePicker(media: room.media) }
         .sheet(isPresented: $room.devicesOpen) { DevicePicker(media: room.media) }
         .frame(minWidth: 640, minHeight: 420)
+    }
+
+    private var drawerTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity)
     }
 }
 
@@ -65,13 +70,66 @@ private struct AtTheDoor: View {
                 .foregroundStyle(DesignTokens.ink)
                 .lineLimit(1)
             PillButton(title: "Not Now") { door.dismissPeephole() }.disabled(door.isAdmitting)
-            PillButton(title: door.isAdmitting ? "Opening…" : "Accept", prominent: true) { door.openDoor() }.disabled(door.isAdmitting)
+            BringInSplit()
         }
         .padding(.leading, 8)
         .padding(.trailing, 6)
         .frame(height: 38)
         .background(Capsule().fill(.black.opacity(0.7)))
         .overlay(Capsule().strokeBorder(DesignTokens.hairline, lineWidth: 1))
+        .animation(.easeOut(duration: 0.18), value: door.isAdmitting)
+    }
+}
+
+/// Occupied hang: add them here, or leave and take the knock in a new room.
+private struct BringInSplit: View {
+    @EnvironmentObject private var door: DoorController
+    @EnvironmentObject private var room: RoomSession
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button {
+                door.openDoor(bringIn: .add)
+            } label: {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 11)
+                    .frame(height: 24)
+                    .opacity(room.isFull && !door.isAdmitting ? 0.55 : 1)
+            }
+            .buttonStyle(.plain)
+            .disabled(door.isAdmitting || room.isFull)
+            .help(room.isFull ? "This call is full." : "Add them to this call")
+
+            if !door.isAdmitting {
+                Menu {
+                    Button("End this call") { door.openDoor(bringIn: .end) }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.black.opacity(0.8))
+                        .frame(width: 22, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .help("End this call and let them in")
+            }
+        }
+        .background(
+            Capsule().fill(DesignTokens.utility.opacity(hovering ? 1 : 0.9))
+        )
+        .disabled(door.isAdmitting)
+        .onHover { hovering = $0 }
+        .contentTransition(.opacity)
+    }
+
+    private var title: String {
+        if door.isAdmitting { return "Opening…" }
+        if room.isFull { return "Room full" }
+        return "Add to this call"
     }
 }
 
@@ -191,7 +249,7 @@ private struct ControlBar: View {
         HStack(spacing: 10) {
             RoomControl(label: room.micOn ? "Mute microphone" : "Turn on microphone", symbol: room.micOn ? "mic.fill" : "mic.slash.fill",
                         tint: room.micOn ? .neutral : .off) { Task { await room.media.setMicrophone(!room.micOn) } }
-                .disabled(!room.media.isConnected || room.media.isUpdating)
+                .disabled(room.media.isUpdating || (!room.media.isConnected && !(room.micOn && room.media.phase == .reconnecting)))
             RoomControl(label: room.camOn ? "Turn off camera" : "Turn on camera", symbol: room.camOn ? "video.fill" : "video.slash.fill",
                         tint: room.camOn ? .neutral : .off) { Task { await room.media.setCamera(!room.camOn) } }
                 .disabled(!room.media.isConnected || room.media.isUpdating)

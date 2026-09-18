@@ -6,6 +6,19 @@ struct Profile: Identifiable, Hashable, Codable, Sendable {
     var handle: String
     var displayName: String
     var avatarURL: URL?
+    var openDoorPolicy: Bool = false
+}
+
+extension Profile {
+    private enum CodingKeys: String, CodingKey { case id, handle, displayName, avatarURL, openDoorPolicy }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        handle = try values.decode(String.self, forKey: .handle)
+        displayName = try values.decode(String.self, forKey: .displayName)
+        avatarURL = try values.decodeIfPresent(URL.self, forKey: .avatarURL)
+        openDoorPolicy = try values.decodeIfPresent(Bool.self, forKey: .openDoorPolicy) ?? false
+    }
 }
 
 enum FollowStatus: String, Codable, Sendable {
@@ -58,6 +71,14 @@ struct MediaGrant: Sendable, Equatable {
 struct Visit: Sendable {
     let mode: VisitMode
     let grant: MediaGrant?
+}
+
+/// How many display-name changes are left in the rolling 14-day window.
+struct NameQuota: Sendable, Equatable {
+    let remaining: Int
+    let resetsAt: Date?
+
+    static let fresh = NameQuota(remaining: 2, resetsAt: nil)
 }
 
 /// Where the account stands. The mock is always `ready`.
