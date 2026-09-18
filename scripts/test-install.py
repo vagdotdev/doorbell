@@ -146,16 +146,26 @@ doorbell_validate_update "$CURRENT" "$INCOMING"
 
     def test_generated_web_installer_matches(self):
         subprocess.run(['python3',str(ROOT/'scripts/generate-installer.py'),'--check'],check=True)
-    def check_publish(self, dirty=False, distribution='private-beta', signature='adhoc', valid=True, gatekeeper=False, success=False):
+    def check_publish(self, dirty=False, distribution='private-beta', signature='adhoc', valid=True, gatekeeper=False, success=False, drift=False):
         # Execute the actual publish branch with external commands replaced.
-        publish=(ROOT/'scripts/release.sh').read_text().split('if [[ "${1:-}" == "--publish" ]]; then',1)[1]
+        publish=(ROOT/'scripts/release.sh').read_text().rsplit('if [[ "${1:-}" == "--publish" ]]; then',1)[1]
         with tempfile.TemporaryDirectory(prefix='doorbell-publish-test-') as temp:
             marker=pathlib.Path(temp)/'published'
             script='''set -- --publish
-git() { if [[ "$DIRTY" == 1 ]]; then echo ' M source.swift'; fi; }
+git() {
+  if [[ "$1" == status ]]; then
+    if [[ "$DIRTY" == 1 ]]; then echo ' M source.swift'; fi
+  else echo "$CURRENT_COMMIT"; fi
+}
 spctl() { [[ "$GATEKEEPER" == 1 ]]; }
 codesign() { if [[ "$1" == -dv ]]; then echo "Signature=$SIGNATURE"; else [[ "$VALID" == 1 ]]; fi; }
-gh() { touch "$MARKER"; }
+gh() {
+  if [[ "$1 $2" == "release create" ]]; then
+    [[ " $* " == *" --target $release_commit "* ]] || return 1
+    touch "$MARKER"
+  fi
+}
+release_commit=abcdef0
 staging=/unused
 OUT=/unused
 tag=v2026.09.19-1200-abcdef0
@@ -163,9 +173,10 @@ if [[ "${1:-}" == "--publish" ]]; then
 '''+publish
             r=subprocess.run(['zsh','-eu','-c',script],env={**os.environ,'DOORBELL_ALLOW_UNSIGNED':'1','DIRTY':str(int(dirty)),
                 'DOORBELL_DISTRIBUTION':distribution,'SIGNATURE':signature,'VALID':str(int(valid)),
-                'GATEKEEPER':str(int(gatekeeper)),'MARKER':str(marker)},capture_output=True,text=True)
+                'GATEKEEPER':str(int(gatekeeper)),'MARKER':str(marker),'CURRENT_COMMIT':'changed' if drift else 'abcdef0'},capture_output=True,text=True)
             self.assertEqual(r.returncode==0,success,r.stdout+r.stderr)
             self.assertEqual(marker.exists(),success)
+    def test_publish_refuses_source_commit_drift(self): self.check_publish(drift=True)
     def test_beta_publish_refuses_dirty_tree(self): self.check_publish(dirty=True)
     def test_beta_publish_accepts_integrity_checked_adhoc_release(self): self.check_publish(success=True)
     def test_beta_publish_rejects_broken_signature(self): self.check_publish(valid=False)
