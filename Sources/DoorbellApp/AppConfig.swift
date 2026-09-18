@@ -11,6 +11,8 @@ struct AppConfig: Sendable {
     let supabaseURL: URL?
     let supabaseAnonKey: String?
     let profile: String
+    /// Shared password behind the name-yourself join. Not shown in the UI.
+    let joinSecret: String
     let useConvex: Bool
     let useSupabase: Bool
     /// A real backend with real media, as opposed to the mock hallway.
@@ -44,6 +46,7 @@ struct AppConfig: Sendable {
         supabaseURL = values["SUPABASE_URL"].flatMap(URL.init(string:))
         supabaseAnonKey = values["SUPABASE_ANON_KEY"]
         profile = values["DOORBELL_PROFILE"] ?? "default"
+        joinSecret = values["DOORBELL_JOIN_SECRET"] ?? "doorbell"
         useConvex = values["DOORBELL_BACKEND"] == "convex" && convexURL != nil
         useSupabase = values["DOORBELL_BACKEND"] == "supabase" && supabaseURL != nil && supabaseAnonKey != nil
     }

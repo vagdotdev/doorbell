@@ -55,7 +55,7 @@ final class NotchPanel: NSPanel {
         contentView = host.fillingContainer()
         state.onKindChange = { [weak self] kind in
             self?.resize(to: kind)
-            // Opening the hallway is the moment to catch up on accepts and requests.
+            // Opening the building is the moment to catch up on accepts and requests.
             if kind == .board, let hallway = self?.hallway { Task { await hallway.refresh() } }
         }
         state.onModeChange = { [weak self] mode in
@@ -68,16 +68,16 @@ final class NotchPanel: NSPanel {
             if account != .ready {
                 state.mode = .account
             } else if state.mode == .account {
-                state.mode = .hallway
+                state.mode = .building
             }
         }
 
         // A pinned shell (search, settings…) lets go when you click anywhere else.
-        // Not while a snapshot is being taken: whoever asked for it is still typing.
-        if ProcessInfo.processInfo.environment["DOORBELL_SNAPSHOT"] == nil {
-            clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.state.unpin() }
-            }
+        // Not while a snapshot is being taken: whoever asked for it is still typing, and
+        // their pointer must not open or close the shell either.
+        guard ProcessInfo.processInfo.environment["DOORBELL_SNAPSHOT"] == nil else { return }
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.state.unpin() }
         }
         // Hover, from the pointer's position against the window — the one thing that
         // reports reliably while some other app is frontmost. Global covers other apps'

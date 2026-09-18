@@ -46,7 +46,7 @@ DOORBELL_START_MODE=settings swift run         # search | requests | settings | 
 DOORBELL_SIMULATE=knock:arjun swift run        # or walkin:arjun — fires 2 s after launch
 DOORBELL_MOCK_RESET=1 swift run                # fresh fake graph
 DOORBELL_SNAPSHOT=/tmp/door.png swift run      # write the panel to PNG after 3.5 s and quit (DOORBELL_SNAPSHOT_DELAY)
-DOORBELL_SIGNIN=alice@test.local:password123   # real backend: sign in on launch
+DOORBELL_SIGNIN=vagdev@doorbell.local:doorbell   # real backend: sign in on launch (join credentials)
 DOORBELL_AUTO_OPEN=5                           # real backend: answer the next knock after 5 s
 ```
 
@@ -54,29 +54,46 @@ Without a `.env` the app runs on the mock hallway: fake friends, fake knocks, no
 
 ### Real backend, locally (Convex)
 
-Convex runs on this Mac as an anonymous local deployment; no account needed until you deploy.
-LiveKit's dev server does media.
+For ~10–18 friends: everyone opens the app, types a name + `@handle`, and joins.
+No email UI. Under the hood each person is `{handle}@doorbell.local` plus a shared
+secret (`DOORBELL_JOIN_SECRET`).
+
+**What goes where**
+
+| Where | What |
+|---|---|
+| Mac `.env` (this repo, gitignored) | `DOORBELL_BACKEND=convex`, `CONVEX_URL`, optional `DOORBELL_JOIN_SECRET` |
+| Convex deployment env (`npx convex env set`) | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, auth keys (`JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL`) |
+| Never in the app | LiveKit secrets — only on Convex |
 
 ```sh
 npm install
 livekit-server --dev --bind 127.0.0.1          # media; keep it running
-npm run dev                                    # local deployment; writes CONVEX_URL to .env.local; keep it running
-node scripts/convex-auth-keys.mjs              # once: signing keys for Convex Auth
-npx convex env set LIVEKIT_URL=ws://127.0.0.1:7880 LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret
-scripts/seed-convex.sh                         # alice + bob (mutual follow), carol (bob is on her close list)
-echo DOORBELL_BACKEND=convex >> .env
-scripts/bundle.sh debug                        # → build/Doorbell.app (a bundle keeps camera/mic permission)
-open build/Doorbell.app
+npm run dev                                    # local Convex; writes CONVEX_URL to .env.local; keep it running
+node scripts/convex-auth-keys.mjs              # once: JWT signing keys
+npx convex env set LIVEKIT_URL=ws://127.0.0.1:7880
+npx convex env set LIVEKIT_API_KEY=devkey
+npx convex env set LIVEKIT_API_SECRET=secret
+npx convex env set LIVEKIT_PUBLIC_URL=ws://127.0.0.1:7880
+cp .env.example .env                           # already points at Convex if you follow the example
+python3 scripts/seed-friends.sh                # vagdev, priya, arjun — already friends
+scripts/bundle.sh debug
+open build/Doorbell.app                        # Join as @vagdev (or any new handle)
 ```
 
-Sign in as `alice@test.local` / `password123`. Second door on the same Mac:
-`open -n build/Doorbell.app --env DOORBELL_PROFILE=bob`.
+Second door on the same Mac:
 
-Backend tests: `npx vitest run` (convex-test, no deployment needed) and `npx tsc --noEmit`.
+```sh
+open -n build/Doorbell.app --env DOORBELL_PROFILE=bob
+```
 
-Cloud: `npx convex login`, `npx convex deploy`, then `node scripts/convex-auth-keys.mjs --prod` and
-`npx convex env set --prod LIVEKIT_URL=… LIVEKIT_API_KEY=… LIVEKIT_API_SECRET=…`. Point
-`CONVEX_URL` in `.env` at the production URL. Details: `docs/convex.md`.
+Join as `@priya`. Vagdev can knock on Priya.
+
+Backend tests: `npx vitest run` and `npx tsc --noEmit`.
+
+**Cloud (when you want friends off this Mac):** in a real terminal run `npx convex login`,
+then `npx convex deploy`, `node scripts/convex-auth-keys.mjs --prod`, set the LiveKit
+env vars with `--prod`, and put the production `CONVEX_URL` in `.env`. Details: `docs/convex.md`.
 
 ### Old backend, locally (Supabase — still works)
 

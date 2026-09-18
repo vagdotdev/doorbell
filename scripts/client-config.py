@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit only public app configuration. Refuse mock/local/secret configuration for distribution."""
+"""Emit public app configuration for the bundle. Local builds may use Convex or Supabase."""
 import argparse, base64, json, pathlib, urllib.parse
 
 def client_config(text, local=False):
@@ -9,8 +9,22 @@ def client_config(text, local=False):
         if not line or line.startswith('#') or '=' not in line: continue
         key,value=line.split('=',1)
         values[key.strip()]=value.strip().strip('\"\'')
-    if local and values.get('DOORBELL_BACKEND') != 'supabase': return ''
-    if values.get('DOORBELL_BACKEND') != 'supabase': raise ValueError('Distribution requires DOORBELL_BACKEND=supabase')
+    backend = values.get('DOORBELL_BACKEND', '')
+    if local and backend not in ('supabase', 'convex'):
+        return ''
+    if backend == 'convex':
+        url = values.get('CONVEX_URL', '')
+        parsed = urllib.parse.urlparse(url)
+        if not parsed.hostname:
+            raise ValueError('CONVEX_URL is required for Convex')
+        if not local and (parsed.scheme not in ('https', 'http') or parsed.hostname in ('localhost', '127.0.0.1', '::1')):
+            # Cloud distribution needs a reachable Convex URL; local debug may use loopback.
+            if not local:
+                raise ValueError('Distribution requires a public CONVEX_URL (not localhost)')
+        secret = values.get('DOORBELL_JOIN_SECRET', 'doorbell')
+        return f'DOORBELL_BACKEND=convex\nCONVEX_URL={url}\nDOORBELL_JOIN_SECRET={secret}\n'
+    if backend != 'supabase':
+        raise ValueError('Set DOORBELL_BACKEND to convex or supabase')
     url=values.get('SUPABASE_URL',''); key=values.get('SUPABASE_ANON_KEY','')
     parsed=urllib.parse.urlparse(url)
     if not parsed.hostname or parsed.username or parsed.password: raise ValueError('Invalid Supabase URL')

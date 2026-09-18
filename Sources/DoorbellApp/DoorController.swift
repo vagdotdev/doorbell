@@ -105,7 +105,7 @@ final class DoorController: ObservableObject {
         isLeaving = true
         generation.advance(); operation?.cancel(); visitTimeout?.cancel()
         visiting = nil; outgoingID = nil
-        state.mode = .hallway
+        state.mode = .building
         Task {
             await media.disconnect()
             isLeaving = false
@@ -115,7 +115,7 @@ final class DoorController: ObservableObject {
     private func finishVisit() {
         visitTimeout?.cancel()
         visiting = nil; outgoingID = nil
-        if case .visiting = state.mode { state.mode = .hallway }
+        if case .visiting = state.mode { state.mode = .building }
     }
     private func admitted(by who: Profile, grant: MediaGrant, visitID: UUID) {
         guard outgoingID == visitID, visiting?.profile.id == who.id, !shuttingDown else { return }
@@ -215,7 +215,7 @@ final class DoorController: ObservableObject {
     }
     private func showCurrentArrival(handoff: Bool = false) {
         guard let arrival = arrivals.first else {
-            if case .peephole = state.mode { state.mode = .hallway }
+            if case .peephole = state.mode { state.mode = .building }
             if !room.isActive { IncomingAudio.shared.depart() }
             return
         }
@@ -310,7 +310,7 @@ final class DoorController: ObservableObject {
         await media.disconnect()
         await peep.disconnect()
         if let oldDoor, let oldID { await backend.leaveVisit(oldDoor.id, visitID: oldID) }
-        state.mode = .hallway
+        state.mode = .building
         IncomingAudio.shared.depart()
         shuttingDown = false
     }

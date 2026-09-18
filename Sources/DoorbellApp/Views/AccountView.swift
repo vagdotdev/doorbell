@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The front door of the app itself: sign in, then take a handle. Two quiet screens
-/// in the board; no window, no wizard.
+/// Name yourself and walk in. No email, no password on screen — friends pick a
+/// name and an @handle. Under the hood the app uses `{handle}@doorbell.local`
+/// plus `DOORBELL_JOIN_SECRET` so the same handle works on another Mac.
 struct AccountView: View {
     @EnvironmentObject private var hallway: HallwayStore
     @EnvironmentObject private var state: NotchState
@@ -9,78 +10,26 @@ struct AccountView: View {
     var body: some View {
         Group {
             switch hallway.account {
-            case .signedOut: SignInForm()
-            case .needsHandle: HandleForm()
-            case .ready: EmptyView()
+            case .signedOut, .needsHandle:
+                JoinForm()
+            case .ready:
+                EmptyView()
             case .unavailable:
                 VStack(spacing: 12) {
-                    Text("Can’t load your account right now.")
+                    Text("Doorbell can’t connect right now.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(DesignTokens.ink)
                     PillButton(title: "Try Again", prominent: true) { Task { await hallway.refresh() } }
                 }
-
             }
         }
         .padding(.horizontal, 22)
         .padding(.bottom, 14)
-        // Clicking into the form pins the shell open; clicking elsewhere lets it go.
         .onTapGesture { state.mode = .account }
     }
 }
 
-private struct SignInForm: View {
-    @EnvironmentObject private var hallway: HallwayStore
-    @State private var email = ""
-    @State private var password = ""
-    @State private var busy = false
-    @State private var problem: String?
-    @FocusState private var focus: Field?
-    private enum Field { case email, password }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Sign in")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(DesignTokens.ink)
-            HStack(spacing: 8) {
-                ShellField("Email", text: $email)
-                    .focused($focus, equals: .email)
-                    .onSubmit { focus = .password }
-                ShellField("Password", text: $password, secure: true)
-                    .focused($focus, equals: .password)
-                    .onSubmit { go(create: false) }
-            }
-            HStack(spacing: 8) {
-                PillButton(title: "Sign In", prominent: true) { go(create: false) }
-                PillButton(title: "Create Account") { go(create: true) }
-                Spacer()
-                Text(problem ?? (busy ? "One moment" : ""))
-                    .font(.system(size: 11))
-                    .foregroundStyle(problem == nil ? DesignTokens.inkTertiary : DesignTokens.social)
-                    .lineLimit(1)
-            }
-            .disabled(busy || email.isEmpty || password.count < 6)
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 10)
-        .onAppear { focus = .email }
-    }
-
-    private func go(create: Bool) {
-        busy = true
-        problem = nil
-        Task {
-            do {
-                if create { try await hallway.signUp(email: email, password: password) }
-                else { try await hallway.signIn(email: email, password: password) }
-            } catch {
-                problem = create ? "Couldn't create that account" : "That didn't match"
-            }
-            busy = false
-        }
-    }
-}
-
-private struct HandleForm: View {
+private struct JoinForm: View {
     @EnvironmentObject private var hallway: HallwayStore
     @State private var name = ""
     @State private var handle = ""
@@ -92,11 +41,13 @@ private struct HandleForm: View {
     private var cleaned: String {
         handle.lowercased().filter { $0.isLetter && $0.isASCII || $0.isNumber || $0 == "_" }
     }
-    private var valid: Bool { (3...20).contains(cleaned.count) && !name.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var valid: Bool {
+        (3...20).contains(cleaned.count) && !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Your name and handle")
+            Text(hallway.account == .needsHandle ? "Almost — pick your name" : "Who are you?")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(DesignTokens.ink)
             HStack(spacing: 8) {
@@ -105,17 +56,16 @@ private struct HandleForm: View {
                     .onSubmit { focus = .handle }
                 ShellField("handle", text: $handle, prefix: "@")
                     .focused($focus, equals: .handle)
-                    .onSubmit(claim)
+                    .onSubmit(join)
             }
             HStack(spacing: 8) {
-                PillButton(title: "Done", prominent: true, action: claim)
+                PillButton(title: "Join", prominent: true, action: join)
                     .disabled(busy || !valid)
                 Spacer()
-                Text(problem ?? "Friends find you by @\(cleaned.isEmpty ? "handle" : cleaned)")
+                Text(problem ?? (busy ? "One moment" : "Friends find you by @\(cleaned.isEmpty ? "handle" : cleaned)"))
                     .font(.system(size: 11))
                     .foregroundStyle(problem == nil ? DesignTokens.inkTertiary : DesignTokens.social)
                     .lineLimit(1)
-                PillButton(title: "Sign Out") { hallway.signOut() }
             }
             Spacer(minLength: 0)
         }
@@ -123,13 +73,21 @@ private struct HandleForm: View {
         .onAppear { focus = .name }
     }
 
-    private func claim() {
+    private func join() {
         guard valid else { return }
         busy = true
         problem = nil
+        let display = name.trimmingCharacters(in: .whitespaces)
         Task {
-            do { try await hallway.claimHandle(cleaned, displayName: name.trimmingCharacters(in: .whitespaces)) }
-            catch { problem = "@\(cleaned) is taken" }
+            do { try await hallway.join(handle: cleaned, displayName: display) }
+            catch {
+                let text = error.localizedDescription
+                if text.localizedCaseInsensitiveContains("taken") {
+                    problem = "@\(cleaned) is taken"
+                } else {
+                    problem = "Couldn’t connect. Try again in a moment."
+                }
+            }
             busy = false
         }
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A row of doors. Yours first, then everyone you follow, then a way to find more.
-struct HallwayView: View {
+struct BuildingView: View {
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var hallway: HallwayStore
 
@@ -49,6 +49,7 @@ private struct DoorCard: View {
                                 .padding(-4)
                         }
                     }
+                    .buildingAvatar(door.profile.id)
                 VStack(spacing: 1) {
                     Text(firstName)
                         .font(.system(size: 12, weight: .medium))
@@ -115,6 +116,7 @@ private struct OwnDoorCard: View {
                                 .offset(x: 4, y: -3)
                         }
                     }
+                    .buildingAvatar(me.id)
                 VStack(spacing: 1) {
                     Text("You")
                         .font(.system(size: 12, weight: .medium))

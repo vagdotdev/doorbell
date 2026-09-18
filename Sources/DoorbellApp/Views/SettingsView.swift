@@ -182,6 +182,9 @@ private struct ProfileCard: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Choose a profile photo"
+        // An agent app is never frontmost; without this the picker can open behind
+        // whatever the person is working in.
+        NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         busy = true
         problem = nil

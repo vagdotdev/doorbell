@@ -11,7 +11,7 @@ struct SubHeader<Content: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button { state.mode = .hallway } label: {
+            Button { state.mode = .building } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(DesignTokens.inkSecondary)

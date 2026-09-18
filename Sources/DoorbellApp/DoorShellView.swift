@@ -6,9 +6,16 @@ struct DoorShellView: View {
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var controller: DoorController
     @EnvironmentObject private var hallway: HallwayStore
+    @Namespace private var avatars
 
     private var size: CGSize { geometry.size(for: state.kind) }
     private var frameSize: CGSize { geometry.frameSize(for: state.kind) }
+
+    /// The intro plays the first time the board opens with a building to show.
+    private var wantsSplash: Bool {
+        state.kind == .board && state.splash != .done && hallway.me != nil
+            && ProcessInfo.processInfo.environment["DOORBELL_NO_SPLASH"] == nil
+    }
 
     private var shape: NotchShape {
         state.isOpen
@@ -55,16 +62,30 @@ struct DoorShellView: View {
         .alert("Doorbell", isPresented: Binding(get: { controller.problem != nil || hallway.problem != nil }, set: { if !$0 { controller.problem = nil; hallway.problem = nil } })) {
             Button("OK") { controller.problem = nil; hallway.problem = nil }
         } message: { Text(controller.problem ?? hallway.problem ?? "") }
+        // Signing out (or losing the account) means the intro is due again.
+        .onChange(of: hallway.account) { _, account in
+            if account != .ready { state.splash = .pending }
+        }
     }
 
     private var boardContent: some View {
         let s = geometry.size(for: .board)
-        return VStack(spacing: 0) {
-            TopRow()
-                .frame(height: geometry.notchHeight)
-                .padding(.horizontal, 14)
-            ShellBody()
-                .background(Starfield(intensity: 0.55, seed: 11))
+        return ZStack {
+            VStack(spacing: 0) {
+                TopRow()
+                    .frame(height: geometry.notchHeight)
+                    .padding(.horizontal, 14)
+                ShellBody()
+                    .background(Starfield(intensity: 0.55, seed: 11))
+            }
+            .environment(\.avatarNamespace, avatars)
+            .environment(\.splashOwnsAvatars, wantsSplash && state.splash != .settling)
+            .environment(\.splashOnScreen, wantsSplash)
+            if wantsSplash, let me = hallway.me {
+                SplashView(me: me, friends: hallway.doors.map(\.profile), geometry: geometry,
+                           namespace: avatars)
+                    .zIndex(1)
+            }
         }
         .frame(width: s.width, height: s.height)
     }
@@ -135,8 +156,8 @@ private struct KnockBounce: ViewModifier {
     }
 }
 
-/// Doorbell is both the app name and home tab; settings sits beside it, spelled out.
-/// Shelf and search stay on the right.
+/// The building is home; settings sits beside it, spelled out. Shelf and search stay
+/// on the right.
 private struct TopRow: View {
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var hallway: HallwayStore
@@ -144,14 +165,14 @@ private struct TopRow: View {
     var body: some View {
         HStack(spacing: 0) {
             if hallway.account != .ready {
-                Spacer()   // nothing to say up here until there is a hallway
+                Spacer()   // nothing to say up here until there is a building
             } else {
                 HStack(spacing: 4) {
-                    TabPill(title: "Doorbell", symbol: nil,
-                            selected: state.mode != .shelf && state.mode != .settings) { state.mode = .hallway }
+                    TabPill(title: "Building", symbol: "building.2",
+                            selected: state.mode != .shelf && state.mode != .settings) { state.mode = .building }
                     TabPill(title: "Open settings", symbol: "gearshape",
                             selected: state.mode == .settings) {
-                        state.mode = state.mode == .settings ? .hallway : .settings
+                        state.mode = state.mode == .settings ? .building : .settings
                     }
                 }
                 Spacer()
@@ -159,7 +180,7 @@ private struct TopRow: View {
                     TabPill(title: "Shelf", symbol: "tray",
                             selected: state.mode == .shelf) { state.mode = .shelf }
                     ToolButton(symbol: "magnifyingglass", active: state.mode == .search) {
-                        state.mode = state.mode == .search ? .hallway : .search
+                        state.mode = state.mode == .search ? .building : .search
                     }
                     .help("Find friends")
                 }
@@ -170,18 +191,14 @@ private struct TopRow: View {
 
 private struct TabPill: View {
     let title: String
-    let symbol: String?
+    let symbol: String
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                if let symbol {
-                    Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-                } else {
-                    PeepholeMark()
-                }
+                Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
                 Text(title).font(.system(size: 12, weight: .medium))
             }
             .fixedSize()
@@ -194,23 +211,6 @@ private struct TabPill: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-/// A dark lens and a thin rim: the same peephole as the door, at tab size.
-private struct PeepholeMark: View {
-    var body: some View {
-        Circle()
-            .fill(.black)
-            .overlay(Circle().strokeBorder(.primary.opacity(0.8), lineWidth: 1))
-            .overlay(Circle().strokeBorder(.primary.opacity(0.25), lineWidth: 0.5).padding(3))
-            .overlay(alignment: .topLeading) {
-                Circle().fill(.primary.opacity(0.8))
-                    .frame(width: 2, height: 2)
-                    .offset(x: 3, y: 3)
-            }
-            .frame(width: 13, height: 13)
-            .accessibilityHidden(true)
     }
 }
 
@@ -245,12 +245,12 @@ private struct ShellBody: View {
                 AccountView()
             } else {
             switch state.mode {
-            case .hallway: HallwayView()
+            case .building: BuildingView()
             case .shelf: ShelfPlaceholder()
             case .search: SearchView()
             case .requests: RequestsView()
             case .settings: SettingsView()
-            case .account: HallwayView()
+            case .account: BuildingView()
             case .peephole, .pinhole, .visiting: EmptyView()   // door modes render in their own shells
             }
             }

@@ -69,6 +69,30 @@ final class HallwayStore: ObservableObject {
         await refresh()
     }
 
+    /// Name-yourself join for the friend group. No email UI — the app signs in as
+    /// `{handle}@doorbell.local` with `AppConfig.joinSecret`, then claims the handle.
+    func join(handle: String, displayName: String) async throws {
+        let email = "\(handle)@doorbell.local"
+        let password = AppConfig.current.joinSecret
+        // Prefer an existing account (same handle on another launch / Mac).
+        do {
+            try await backend.signIn(email: email, password: password)
+        } catch {
+            try await backend.signUp(email: email, password: password)
+        }
+        await refresh()
+        if account == .needsHandle {
+            try await backend.claimHandle(handle, displayName: displayName)
+            await refresh()
+        } else if account == .ready, let me, me.displayName != displayName {
+            try? await backend.updateProfile(displayName: displayName)
+            await refresh()
+        }
+        guard account == .ready else {
+            throw BackendError.noProfile
+        }
+    }
+
     func updateProfile(displayName: String) async throws {
         try await backend.updateProfile(displayName: displayName)
         await refresh()

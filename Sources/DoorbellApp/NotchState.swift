@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum ShellMode: Equatable {
-    case hallway, shelf, search, requests, settings
+    case building, shelf, search, requests, settings
     /// Signed out or without a handle yet: the board is the sign-in form.
     case account
     /// Someone is at my door.
@@ -15,7 +15,7 @@ enum ShellMode: Equatable {
     /// Modes that hold the shell open even when the mouse wanders off.
     var pins: Bool {
         switch self {
-        case .hallway, .shelf: false
+        case .building, .shelf: false
         case .search, .requests, .settings, .account, .peephole, .pinhole, .visiting: true
         }
     }
@@ -46,7 +46,7 @@ final class NotchState: ObservableObject {
     /// Raw hover from the view. Opening waits a beat so a passing cursor doesn't
     /// trigger it; closing waits a little longer so grazing the edge doesn't flicker.
     @Published var isHovering = false { didSet { if oldValue != isHovering { settleHover() } } }
-    @Published var mode: ShellMode = .hallway {
+    @Published var mode: ShellMode = .building {
         didSet {
             if oldValue != mode { onModeChange?(mode) }
             recompute()
@@ -57,6 +57,11 @@ final class NotchState: ObservableObject {
     }
     /// Toggles to make the shell bounce once (a knock).
     @Published var bounce = false
+    /// The intro that plays the first time the board opens with a building to show.
+    /// `.playing` owns the avatars' geometry; `.settling` hands it to the building.
+    @Published var splash: SplashPhase = .pending
+
+    enum SplashPhase: Equatable { case pending, playing, settling, done }
 
     var isExpanded: Bool { kind != .compact }
     /// The shell reads as an open card: rounded all round, hairline, shadow.
@@ -73,7 +78,7 @@ final class NotchState: ObservableObject {
     /// Door moments are not dismissed this way.
     func unpin() {
         switch mode {
-        case .search, .requests, .settings, .account: mode = .hallway
+        case .search, .requests, .settings, .account: mode = .building
         default: break
         }
     }
