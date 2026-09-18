@@ -24,6 +24,11 @@ if [[ -d /Applications/Xcode.app/Contents/Developer ]]; then
   export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 
+release_commit=$(git rev-parse HEAD)
+if [[ "${1:-}" == "--publish" ]]; then
+  [[ -z "$(git status --porcelain)" ]] || { echo "Commit the reviewed release candidate before building for publication." >&2; exit 1; }
+fi
+
 OUT="${DOORBELL_BUILD_DIR:-build}"
 OUT="${OUT:A}"
 mkdir -p "$OUT"
@@ -54,6 +59,7 @@ echo "   $OUT/Doorbell.dmg + Doorbell.dmg.sha256"
 
 if [[ "${1:-}" == "--publish" ]]; then
   [[ -z "$(git status --porcelain)" ]] || { echo "Commit the reviewed release candidate before publishing." >&2; exit 1; }
+  [[ "$(git rev-parse HEAD)" == "$release_commit" ]] || { echo "Source commit changed during the build. Rebuild before publishing." >&2; exit 1; }
   codesign --verify --deep --strict "$staging/Doorbell.app"
   distribution="${DOORBELL_DISTRIBUTION:-private-beta}"
   if [[ "$distribution" == private-beta ]]; then
@@ -69,6 +75,6 @@ if [[ "${1:-}" == "--publish" ]]; then
   fi
   command -v gh >/dev/null 2>&1 || { echo "Install GitHub CLI: brew install gh" >&2; exit 1; }
   echo "→ gh release create $tag"
-  gh release create --repo vagdotdev/doorbell "$tag" "$OUT/Doorbell.dmg" "$OUT/Doorbell.dmg.sha256" --title "Doorbell $tag" --notes "$notes"
+  gh release create --repo vagdotdev/doorbell --target "$release_commit" "$tag" "$OUT/Doorbell.dmg" "$OUT/Doorbell.dmg.sha256" --title "Doorbell $tag" --notes "$notes"
   echo "   https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/latest"
 fi
