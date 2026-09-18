@@ -45,7 +45,7 @@ private struct DoorCard: View {
                     .overlay {
                         if door.isCloseFriend {
                             Circle()
-                                .strokeBorder(DesignTokens.social, lineWidth: 2)
+                                .strokeBorder(DesignTokens.openDoor, lineWidth: 2)
                                 .padding(-4)
                         }
                     }
@@ -67,11 +67,13 @@ private struct DoorCard: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .contextMenu {
-            Toggle("Allow Walk-ins", isOn: Binding(
+            Toggle("Allow walk-ins", isOn: Binding(
                 get: { door.isCloseFriend },
                 set: { hallway.setCloseFriend(door.profile, $0) }
             ))
+            .tint(DesignTokens.openDoor)
             .disabled(!door.followsMe)
+            Text("Friends knock. Close friends just get in.")
             if !door.followsMe {
                 Text("Available once you're friends")
             }

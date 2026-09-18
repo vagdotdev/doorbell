@@ -17,8 +17,10 @@ Done: park audit on this surface — 23 convex-test, 23 Swift tests (incl. Join-
 copy), tsc + build clean; every failure string rendered and graded; one ghost-found
 ("spontaneous" mode jumps) traced to live user clicks via an input spy, then removed.
 
-Done: top row is minimal — Doorbell home on the left, Shelf + search + gear on the
-right, middle ±92pt empty behind the physical notch (measured 185×32 on this Mac).
+Done: top row is minimal — Doorbell home on the left, search + gear on the right.
+Shelf lives as a diamond in the board's bottom-right corner (toggles what's inside
+your door, with a crossfade). Close-friend ring is green; the walk-ins menu reads
+"Friends knock. Close friends just get in." Glass setting previews the shapes.
 
 Now: keep `npm run dev` + `livekit-server --dev` running; friends Join with a name + @handle. Cloud: `npx convex login` + deploy when you want it off this Mac. See README → "Real backend, locally (Convex)".
 

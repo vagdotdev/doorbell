@@ -29,7 +29,19 @@ struct SettingsView: View {
                         }
                         Divider().overlay(DesignTokens.hairline)
                         SettingRow(title: "Glass") {
-                            SegmentedPills(options: PeepholeStyle.allCases, selection: $peephole) { $0.label }
+                            HStack(spacing: 10) {
+                                ForEach(PeepholeStyle.allCases) { style in
+                                    Button {
+                                        withAnimation(.easeOut(duration: 0.15)) { peephole = style }
+                                    } label: {
+                                        GlassSwatch(style: style, selected: peephole == style)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(style.label)
+                                    .accessibilityLabel("Glass: \(style.label)")
+                                    .accessibilityAddTraits(peephole == style ? .isSelected : [])
+                                }
+                            }
                         }
                         Divider().overlay(DesignTokens.hairline)
                         SettingRow(title: "Sounds") {
@@ -232,6 +244,37 @@ private struct ProfileCard: View {
                    from: .zero, operation: .copy, fraction: 1)
         NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.82])
+    }
+}
+
+/// The glass at peephole size: a circle for Round, a wide rect for Wide.
+/// Selected glass takes the utility accent.
+private struct GlassSwatch: View {
+    let style: PeepholeStyle
+    let selected: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Group {
+            switch style {
+            case .eyehole:
+                Circle()
+                    .strokeBorder(rim, lineWidth: 1.5)
+                    .frame(width: 20, height: 20)
+            case .rectangle:
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(rim, lineWidth: 1.5)
+                    .frame(width: 30, height: 18)
+            }
+        }
+        .background(Circle().fill(DesignTokens.utility.opacity(selected ? 0.12 : 0)))
+        .frame(width: 34, height: 26)
+        .onHover { hovering = $0 }
+    }
+
+    private var rim: Color {
+        selected ? DesignTokens.utility
+            : (hovering ? DesignTokens.inkSecondary : DesignTokens.inkTertiary)
     }
 }
 

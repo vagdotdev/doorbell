@@ -78,6 +78,17 @@ struct DoorShellView: View {
                 ShellBody()
                     .background(Starfield(intensity: 0.55, seed: 11))
             }
+            // The shelf's handle: a small diamond in the bottom-right corner. Tapping
+            // swaps the board for what's inside your door — and back.
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    ShelfDiamond()
+                }
+            }
+            .padding(.trailing, 16)
+            .padding(.bottom, 8)
             .environment(\.avatarNamespace, avatars)
             .environment(\.splashOwnsAvatars, wantsSplash && state.splash != .settling)
             .environment(\.splashOnScreen, wantsSplash)
@@ -171,8 +182,6 @@ private struct TopRow: View {
                         selected: state.mode != .shelf && state.mode != .settings) { state.mode = .building }
                 Spacer()
                 HStack(spacing: 2) {
-                    TabPill(title: "Shelf", symbol: "tray",
-                            selected: state.mode == .shelf) { state.mode = .shelf }
                     ToolButton(symbol: "magnifyingglass", active: state.mode == .search) {
                         state.mode = state.mode == .search ? .building : .search
                     }
@@ -234,6 +243,35 @@ private struct PeepholeMark: View {
     }
 }
 
+/// A small diamond outline: what's inside your door. Filled while the shelf is open.
+private struct ShelfDiamond: View {
+    @EnvironmentObject private var state: NotchState
+    @State private var hovering = false
+    private var active: Bool { state.mode == .shelf }
+
+    var body: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                state.mode = active ? .building : .shelf
+            }
+        } label: {
+            RoundedRectangle(cornerRadius: 2.5)
+                .strokeBorder(active ? DesignTokens.utility
+                                : (hovering ? DesignTokens.inkSecondary : DesignTokens.inkTertiary),
+                             lineWidth: 1.25)
+                .background(RoundedRectangle(cornerRadius: 2.5)
+                    .fill(active ? DesignTokens.utility.opacity(0.2) : .clear))
+                .rotationEffect(.degrees(45))
+                .frame(width: 12, height: 12)
+                .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+        .help("Shelf — what's inside your door")
+        .accessibilityLabel("Shelf")
+        .onHover { hovering = $0 }
+    }
+}
+
 private struct ToolButton: View {
     let symbol: String
     let active: Bool
@@ -265,16 +303,17 @@ private struct ShellBody: View {
                 AccountView()
             } else {
             switch state.mode {
-            case .building: BuildingView()
-            case .shelf: ShelfPlaceholder()
-            case .search: SearchView()
-            case .requests: RequestsView()
-            case .settings: SettingsView()
-            case .account: BuildingView()
+            case .building: BuildingView().transition(.opacity)
+            case .shelf: ShelfPlaceholder().transition(.opacity)
+            case .search: SearchView().transition(.opacity)
+            case .requests: RequestsView().transition(.opacity)
+            case .settings: SettingsView().transition(.opacity)
+            case .account: BuildingView().transition(.opacity)
             case .peephole, .pinhole, .visiting: EmptyView()   // door modes render in their own shells
             }
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: state.mode)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
