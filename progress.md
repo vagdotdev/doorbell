@@ -17,6 +17,9 @@ Done: park audit on this surface — 23 convex-test, 23 Swift tests (incl. Join-
 copy), tsc + build clean; every failure string rendered and graded; one ghost-found
 ("spontaneous" mode jumps) traced to live user clicks via an input spy, then removed.
 
+Done: top row is minimal — Doorbell home on the left, Shelf + search + gear on the
+right, middle ±92pt empty behind the physical notch (measured 185×32 on this Mac).
+
 Now: keep `npm run dev` + `livekit-server --dev` running; friends Join with a name + @handle. Cloud: `npx convex login` + deploy when you want it off this Mac. See README → "Real backend, locally (Convex)".
 
 Next: utilities, first-launch window (`docs/first-launch.md`), ship. Supabase stack is legacy beside Convex.

@@ -156,8 +156,8 @@ private struct KnockBounce: ViewModifier {
     }
 }
 
-/// The building is home; settings sits beside it, spelled out. Shelf and search stay
-/// on the right.
+/// Home on the left, tools on the right, nothing in the middle: the middle ±92pt of
+/// this strip sits behind the physical notch. Keep both clusters in their corners.
 private struct TopRow: View {
     @EnvironmentObject private var state: NotchState
     @EnvironmentObject private var hallway: HallwayStore
@@ -167,22 +167,20 @@ private struct TopRow: View {
             if hallway.account != .ready {
                 Spacer()   // nothing to say up here until there is a building
             } else {
-                HStack(spacing: 4) {
-                    TabPill(title: "Building", symbol: "building.2",
-                            selected: state.mode != .shelf && state.mode != .settings) { state.mode = .building }
-                    TabPill(title: "Open settings", symbol: "gearshape",
-                            selected: state.mode == .settings) {
-                        state.mode = state.mode == .settings ? .building : .settings
-                    }
-                }
+                TabPill(title: "Doorbell", symbol: nil,
+                        selected: state.mode != .shelf && state.mode != .settings) { state.mode = .building }
                 Spacer()
-                HStack(spacing: 4) {
+                HStack(spacing: 2) {
                     TabPill(title: "Shelf", symbol: "tray",
                             selected: state.mode == .shelf) { state.mode = .shelf }
                     ToolButton(symbol: "magnifyingglass", active: state.mode == .search) {
                         state.mode = state.mode == .search ? .building : .search
                     }
                     .help("Find friends")
+                    ToolButton(symbol: "gearshape", active: state.mode == .settings) {
+                        state.mode = state.mode == .settings ? .building : .settings
+                    }
+                    .help("Settings")
                 }
             }
         }
@@ -191,19 +189,24 @@ private struct TopRow: View {
 
 private struct TabPill: View {
     let title: String
-    let symbol: String
+    /// SF Symbol, or nil for the peephole mark (home).
+    let symbol: String?
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
+                } else {
+                    PeepholeMark()
+                }
                 Text(title).font(.system(size: 12, weight: .medium))
             }
             .fixedSize()
             .foregroundStyle(selected ? DesignTokens.ink : DesignTokens.inkSecondary)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 7)
             .frame(height: 22)
             .background(
                 Capsule().fill(selected ? DesignTokens.raised : .clear)
@@ -211,6 +214,23 @@ private struct TabPill: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// A dark lens and a thin rim: the same peephole as the door, at tab size.
+private struct PeepholeMark: View {
+    var body: some View {
+        Circle()
+            .fill(.black)
+            .overlay(Circle().strokeBorder(.primary.opacity(0.8), lineWidth: 1))
+            .overlay(Circle().strokeBorder(.primary.opacity(0.25), lineWidth: 0.5).padding(3))
+            .overlay(alignment: .topLeading) {
+                Circle().fill(.primary.opacity(0.8))
+                    .frame(width: 2, height: 2)
+                    .offset(x: 3, y: 3)
+            }
+            .frame(width: 13, height: 13)
+            .accessibilityHidden(true)
     }
 }
 
