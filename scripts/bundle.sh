@@ -35,7 +35,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Framewor
 
 cp "$BIN/DoorbellApp" "$APP/Contents/MacOS/Doorbell"
 cp "$BIN/DoorbellSwap" "$APP/Contents/MacOS/DoorbellSwap"
-cp -R "$BIN/Doorbell_DoorbellApp.bundle" "$APP/Contents/Resources/"
+# Copy assets into the app bundle. SwiftPM resource bundles bake the build-Mac
+# path into the binary; friends must not need /Users/<dev>/.../.build.
+cp -R Sources/DoorbellApp/Assets/Portraits "$APP/Contents/Resources/Portraits"
+cp -R Sources/DoorbellApp/Assets/Sounds "$APP/Contents/Resources/Sounds"
 for fw in "$BIN"/*.framework; do
   cp -R "$fw" "$APP/Contents/Frameworks/"
 done
@@ -80,7 +83,25 @@ plutil -replace LSMinimumSystemVersion -string 15.0 "$APP/Contents/Info.plist"
 plutil -replace NSHighResolutionCapable -bool true "$APP/Contents/Info.plist"
 
 # The binary was linked with @rpath frameworks; point it at Contents/Frameworks.
-install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Doorbell" 2>/dev/null || true
+# SwiftPM also injects the local Xcode toolchain rpath — delete machine-local ones.
+doorbell_drop_local_rpaths() {
+  local bin="$1" path
+  [[ -f "$bin" ]] || return 0
+  while IFS= read -r path; do
+    case "$path" in
+      /Applications/Xcode.app/*|/Library/Developer/*|/Users/*)
+        /usr/bin/install_name_tool -delete_rpath "$path" "$bin" || return 1
+        ;;
+    esac
+  done < <(/usr/bin/otool -l "$bin" | /usr/bin/awk '/cmd LC_RPATH/{c=1} c && $1=="path"{print $2; c=0}')
+}
+doorbell_drop_local_rpaths "$APP/Contents/MacOS/Doorbell"
+doorbell_drop_local_rpaths "$APP/Contents/MacOS/DoorbellSwap"
+/usr/bin/install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Doorbell" 2>/dev/null || true
+if /usr/bin/otool -l "$APP/Contents/MacOS/Doorbell" | /usr/bin/awk '/cmd LC_RPATH/{c=1} c && $1=="path"{print $2; c=0}' | /usr/bin/grep -E '^(/Applications/Xcode.app/|/Library/Developer/|/Users/)' >/dev/null; then
+  echo 'Doorbell still contains a machine-local rpath.' >&2
+  exit 1
+fi
 
 # Ad-hoc signed private beta. Fresh-Mac approval and permission persistence
 # must be tested; Developer ID/notarization can remove distribution friction later.

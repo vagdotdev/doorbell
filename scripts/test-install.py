@@ -42,8 +42,9 @@ fi
 doorbell_install_bundle "$SOURCE"
 '''
             r=subprocess.run(['zsh','-eu','-c',script],env={**os.environ,'LIB':str(LIB),'SOURCE':str(source),'DOORBELL_APP':str(dest),'DOORBELL_ALLOW_UNSIGNED':'1','DOORBELL_NO_LAUNCH':'0','FAULT':fault},capture_output=True,text=True)
-            self.assertEqual(r.returncode == 0, not fault, r.stdout+r.stderr)
-            if not fault: self.assertEqual((dest/'version').read_text(),'new')
+            expect_success = not fault or fault == 'launch'
+            self.assertEqual(r.returncode == 0, expect_success, r.stdout+r.stderr)
+            if not fault or fault == 'launch': self.assertEqual((dest/'version').read_text(),'new')
             elif existing: self.assertEqual((dest/'version').read_text(),'old')
             else: self.assertFalse(dest.exists())
             self.assertFalse(list(root.glob('.doorbell-install.*')))
@@ -57,13 +58,13 @@ doorbell_install_bundle "$SOURCE"
     def test_failed_copy_preserves_previous(self): self.run_install('copy')
     def test_invalid_bundle_preserves_previous(self): self.run_install('validate')
     def test_failed_move_restores_previous(self): self.run_install('move')
-    def test_failed_launch_restores_previous(self): self.run_install('launch')
-    def test_failed_first_launch_removes_broken_install(self): self.run_install('launch',existing=False)
+    def test_failed_launch_keeps_new_bundle(self): self.run_install('launch')
+    def test_failed_first_launch_keeps_installed_app(self): self.run_install('launch',existing=False)
     def test_launch_does_not_accept_an_unrelated_process(self):
         script='''source "$LIB"
 sleep() { return 0; }
 open() { return 0; }
-ps() { echo /unrelated/Doorbell.app/Contents/MacOS/Doorbell; }
+pgrep() { [[ " $* " == *" /unrelated/Doorbell.app/Contents/MacOS/Doorbell "* ]]; }
 doorbell_launch_app /expected/Doorbell.app
 '''
         r=subprocess.run(['zsh','-eu','-c',script],env={**os.environ,'LIB':str(LIB)},capture_output=True)

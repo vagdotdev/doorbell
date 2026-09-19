@@ -75,22 +75,24 @@ doorbell_validate_update() {
   }
 }
 doorbell_is_running() {
-  ps -ax -o comm= | /usr/bin/grep -F -x "$1/Contents/MacOS/Doorbell" >/dev/null
+  local binary="$1/Contents/MacOS/Doorbell"
+  [[ -x "$binary" ]] || return 1
+  /usr/bin/pgrep -f -- "$binary" >/dev/null 2>&1
 }
 doorbell_launch_app() {
   local app="$1"
   open "$app" || return 1
   local attempt stable=0
-  for attempt in {1..8}; do
+  for attempt in {1..15}; do
     sleep 1
     if doorbell_is_running "$app"; then
       (( stable += 1 ))
-      if (( stable >= 5 )); then return 0; fi
+      if (( stable >= 3 )); then return 0; fi
     elif (( stable > 0 )); then
       break
     fi
   done
-  echo 'Doorbell did not stay running. Check System Settings → Privacy & Security.' >&2
+  echo 'Doorbell did not open automatically. Launch it from Applications; if macOS blocked it, allow it in System Settings → Privacy & Security.' >&2
   return 1
 }
 doorbell_swap_bundles() { "$1" "$2" "$3"; }
@@ -155,9 +157,12 @@ doorbell_install_bundle() (
   else
     mv "$stage/Doorbell.app" "$app" || exit $?
   fi
+  if [[ "${DOORBELL_ALLOW_UNSIGNED:-0}" == 1 && "$(doorbell_signature_kind "$app")" == adhoc ]]; then
+    xattr -cr "$app" || exit $?
+  fi
   installed=1
-  if [[ "${DOORBELL_NO_LAUNCH:-0}" != 1 ]]; then doorbell_launch_app "$app" || exit $?; fi
   completed=1
+  if [[ "${DOORBELL_NO_LAUNCH:-0}" != 1 ]]; then doorbell_launch_app "$app" || true; fi
   echo "Installed $app"
 )
 doorbell_is_official_release_url() {

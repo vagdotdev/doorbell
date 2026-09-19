@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Returning users stay a notch-only accessory.
         NSApp.setActivationPolicy(AppConfig.hasStoredSession ? .accessory : .regular)
         // The Dock shows this during first launch, when the app briefly has a window.
-        if let icon = Bundle.module.url(forResource: "AppIcon", withExtension: "icns") {
+        if let icon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns") {
             NSApp.applicationIconImage = NSImage(contentsOf: icon)
         }
         panel = NotchPanel()

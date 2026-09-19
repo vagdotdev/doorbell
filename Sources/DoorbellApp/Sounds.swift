@@ -77,7 +77,7 @@ enum Sounds {
     @discardableResult
     static func knock() -> Bool {
         guard enabled,
-              let url = Bundle.module.url(forResource: "knock", withExtension: "wav", subdirectory: "Sounds"),
+              let url = Bundle.main.url(forResource: "knock", withExtension: "wav", subdirectory: "Sounds"),
               let player = try? AVAudioPlayer(contentsOf: url) else { return false }
         knockPlayer?.stop()
         player.volume = 0.3

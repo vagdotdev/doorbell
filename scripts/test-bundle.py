@@ -32,6 +32,11 @@ with tempfile.TemporaryDirectory(prefix='doorbell-bundle-audit-') as temporary:
         subprocess.run([sys.executable,str(ROOT/'scripts/signing-config.py'),'verify-app',str(app)],check=True)
         assert (entitlements.get('com.apple.developer.usernotifications.communication') is True) == info['DoorbellFocusStatusEnabled']
         assert 'arm64' in subprocess.check_output(['lipo','-archs',str(contents/'MacOS/Doorbell')],text=True)
+        rpaths=subprocess.check_output(['otool','-l',str(contents/'MacOS/Doorbell')],text=True)
+        assert '/Applications/Xcode.app/' not in rpaths and '/Users/' not in rpaths, 'binary still has a machine-local rpath'
+        binary=contents/'MacOS/Doorbell'
+        dumped=subprocess.check_output(['strings',str(binary)],text=True,errors='replace')
+        assert '/Users/vagdev/' not in dumped and 'Doorbell/.build/' not in dumped, 'binary still embeds this machine\'s build path'
         assert (mount/'install-dmg.sh').is_file(), 'DMG installer helper missing'
         dest=work/'Doorbell.app'
         env={k:v for k,v in os.environ.items() if not k.startswith(('DOORBELL_','CONVEX_'))}

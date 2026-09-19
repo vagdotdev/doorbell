@@ -28,7 +28,8 @@ Done: a real app. App icon (the approved pinhole from `branding/macos-app-icon` 
 
 Done: occupied knock is Add to this call / End this call (`docs/bring-in-plan.md`).
 
-Now: friends install from doorbellnotch.vercel.app; Fresh Ring auto-updates on launch.
+Now: Fresh Ring auto-updates on launch. Publish a new DMG so friends get the path-free binary.
+Done: app loads Sounds/Portraits from the installed bundle (no SwiftPM /Users/…/.build path); strip Xcode rpaths at pack time.
 
 Next: utilities, app window for settings (`docs/first-launch.md` §3), ship. Supabase stack is legacy beside Convex.
 

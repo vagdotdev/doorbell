@@ -20,8 +20,6 @@ let package = Package(
             ],
             path: "Sources/DoorbellApp",
             exclude: ["Info.plist"],
-            // `.copy` keeps Assets/Portraits/ as a folder; `.process` would flatten it.
-            resources: [.copy("Assets/Portraits"), .copy("Assets/Sounds"), .copy("Assets/AppIcon.icns")],
             linkerSettings: [
                 // Embed Info.plist so TCC has usage strings for camera/mic while we
                 // run as a bare executable. An .app bundle replaces this later.

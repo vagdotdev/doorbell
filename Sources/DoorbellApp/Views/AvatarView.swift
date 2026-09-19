@@ -33,7 +33,7 @@ struct AvatarView: View {
     private var localPortrait: NSImage? {
         guard !AppConfig.current.isLive,
               profile.avatarURL == nil,
-              let url = Bundle.module.url(forResource: profile.handle,
+              let url = Bundle.main.url(forResource: profile.handle,
                                           withExtension: "jpg",
                                           subdirectory: "Portraits") else { return nil }
         return NSImage(contentsOf: url)
