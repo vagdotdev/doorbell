@@ -354,6 +354,116 @@
       .hint { padding-left: 0; }
     }
 
+    .agent-box {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .agent-box-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--gray);
+      text-transform: uppercase;
+    }
+
+    .agent-prompt-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--accents-1);
+      border: 1px solid var(--gray-dark);
+      border-radius: 6px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color 120ms ease;
+    }
+
+    .agent-prompt-row:hover {
+      border-color: var(--gray-light);
+    }
+
+    .agent-prompt-row:focus-visible {
+      outline: 2px solid var(--gray-light);
+      outline-offset: 2px;
+    }
+
+    .agent-icons {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+    }
+
+    .agent-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #1a1a1a;
+      border: 1.5px solid var(--gray-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: -6px;
+      position: relative;
+    }
+
+    .agent-icon:nth-child(1) { z-index: 3; }
+    .agent-icon:nth-child(2) { z-index: 2; }
+    .agent-icon:nth-child(3) { z-index: 1; margin-right: 0; }
+
+    .agent-icon svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      color: var(--gray-light);
+    }
+
+    .agent-prompt-text {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--foreground);
+      text-transform: none;
+    }
+
+    .agent-prompt-row .copy-icon {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: var(--gray);
+      transition: color 160ms ease;
+    }
+
+    .agent-prompt-row:hover .copy-icon {
+      color: var(--foreground);
+    }
+
+    .agent-prompt-row.copied .copy-icon { color: var(--foreground); }
+
+    .agent-prompt-row .copy-icon .gi-copy { display: block; }
+    .agent-prompt-row .copy-icon .gi-done { display: none; }
+    .agent-prompt-row.copied .copy-icon .gi-copy { display: none; }
+    .agent-prompt-row.copied .copy-icon .gi-done { display: block; }
+
+    .agent-box-hint {
+      font-size: 13px;
+      color: var(--gray-light);
+      text-transform: none;
+    }
+
+    .agent-box-hint a {
+      color: var(--gray-light);
+      text-decoration: none;
+    }
+
+    .agent-box-hint a:hover {
+      color: var(--foreground);
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .intro { display: none; }
       .page { opacity: 1; }
@@ -388,6 +498,31 @@
     <main>
       <h1><span class="name">doorbell</span><span class="kind">macapp</span></h1>
       <div class="commands">
+        <div class="agent-box">
+          <span class="agent-box-label">set up with ai</span>
+          <div class="agent-prompt-row" id="agent-copy" role="button" tabindex="0" aria-label="copy agent prompt">
+            <div class="agent-icons">
+              <!-- cursor -->
+              <div class="agent-icon">
+                <svg viewBox="0 0 16 16" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l10 6-4.5 1.5L7 14z"/></svg>
+              </div>
+              <!-- claude -->
+              <div class="agent-icon">
+                <svg viewBox="0 0 16 16" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"/><line x1="8" y1="2" x2="8" y2="4.5"/><line x1="8" y1="11.5" x2="8" y2="14"/><line x1="2" y1="8" x2="4.5" y2="8"/><line x1="11.5" y1="8" x2="14" y2="8"/><line x1="3.8" y1="3.8" x2="5.5" y2="5.5"/><line x1="10.5" y1="10.5" x2="12.2" y2="12.2"/><line x1="3.8" y1="12.2" x2="5.5" y2="10.5"/><line x1="10.5" y1="5.5" x2="12.2" y2="3.8"/></svg>
+              </div>
+              <!-- codex / terminal -->
+              <div class="agent-icon">
+                <svg viewBox="0 0 16 16" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5l3 2.5-3 2.5"/><line x1="8.5" y1="11" x2="12" y2="11"/></svg>
+              </div>
+            </div>
+            <span class="agent-prompt-text">Copy the agent prompt to set up immediately</span>
+            <svg class="copy-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <g class="gi-copy"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></g>
+              <g class="gi-done" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></g>
+            </svg>
+          </div>
+          <span class="agent-box-hint">works with any model, any agent, any editor</span>
+        </div>
         <div class="row">
           <span class="label">install</span>
           <div class="cmd-wrap">
@@ -538,6 +673,30 @@
         }
       })
       .catch(() => { /* offline or rate-limited; keep baked tag */ });
+
+    const agentPrompt = [
+      "Install Doorbell on this Mac. Run this command in the terminal:",
+      "",
+      "curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh",
+      "",
+      "This downloads the latest Doorbell.dmg from GitHub releases, verifies its SHA-256 checksum, validates the code signature, installs to /Applications/Doorbell.app, and launches the app.",
+      "Requirements: macOS 15 or later on Apple Silicon.",
+      "If macOS blocks the app, tell me to open System Settings → Privacy & Security and click \"Open Anyway\", then rerun the command.",
+      "Confirm the app is at /Applications/Doorbell.app and is running.",
+    ].join("\n");
+
+    const agentRow = document.getElementById("agent-copy");
+    let agentTimer;
+    function copyAgent() {
+      navigator.clipboard.writeText(agentPrompt).catch(() => {});
+      agentRow.classList.add("copied");
+      clearTimeout(agentTimer);
+      agentTimer = setTimeout(() => agentRow.classList.remove("copied"), 1600);
+    }
+    agentRow.addEventListener("click", copyAgent);
+    agentRow.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); copyAgent(); }
+    });
 
     document.querySelectorAll(".copy").forEach((el) => {
       let timer;
