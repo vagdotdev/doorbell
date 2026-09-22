@@ -69,6 +69,7 @@ Two serialized seats: `media` for the room/visitor, `peep` for the hidden previe
 - Screen share: explicit display/window picker using ScreenCaptureKit sources. The selected source becomes a large, uncropped tile. App audio is excluded.
 - Devices: microphone, output, and camera selection using LiveKit/AVFoundation.
 - Chat: reliable LiveKit data messages, up to 4 KB each and 200 messages in memory. Failed sends retain the draft. Nothing persists after leaving.
+- Stickers: topic `sticker` carries `{"emoji":…}` or `{"custom":<sha256>}`; older builds ignore it. Emoji stickers are Google's animated Noto set (CC BY 4.0), fetched from fonts.gstatic.com and cached in `~/Library/Caches/Doorbell/Stickers`. Custom stickers live in Application Support; the picture (≤ 2 MB) goes by LiveKit byte stream only to people in the room who lack it, and receivers keep it only if its SHA-256 matches, until the room ends.
 - Audio: SDK echo cancellation, automatic gain, noise suppression, high-pass filtering; incoming volume changes for the doorstep.
 
 Permission-denied UI has been inspected. Actual camera, microphone, source capture, device switching, and OS-ended sharing still need permission-enabled two-Mac verification. Connection state is implemented; per-person network-quality indicators are not.

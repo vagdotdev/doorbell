@@ -28,6 +28,8 @@ Done: a real app. App icon (the approved pinhole from `branding/macos-app-icon` 
 
 Done: occupied knock is Add to this call / End this call (`docs/bring-in-plan.md`).
 
+Done: stickers in room chat — animated Noto emoji roll, your own stickers sent peer-to-peer, system emoji palette.
+
 Now: Fresh Ring auto-updates on launch. Publish a new DMG so friends get the path-free binary.
 Done: app loads Sounds/Portraits from the installed bundle (no SwiftPM /Users/…/.build path); strip Xcode rpaths at pack time.
 

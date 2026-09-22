@@ -18,8 +18,14 @@ struct VisitingView: View {
         DoorFrame(geometry: geometry) {
             DoorTitle(name: firstName) {
                 HStack(spacing: 6) {
-                    KnockingDots()
-                    Text(media.phase == .connecting ? "Connecting…" : (media.problem ?? "Quiet voices through the door · Your mic is live when enabled"))
+                    if controller.visitMode == .walkIn {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 10))
+                            .foregroundStyle(DesignTokens.openDoor)
+                    } else {
+                        KnockingDots()
+                    }
+                    Text(subtitle)
                 }
             }
         } glass: {
@@ -36,6 +42,13 @@ struct VisitingView: View {
         } controls: {
             RoundControl(symbol: "xmark", label: "Leave") { controller.leaveVisit() }
         }
+    }
+
+    private var subtitle: String {
+        if media.phase == .connecting { return "Connecting…" }
+        if let problem = media.problem { return problem }
+        if controller.visitMode == .walkIn { return "Walking in…" }
+        return "Quiet voices through the door · Your mic is live when enabled"
     }
 
     private var firstName: String {

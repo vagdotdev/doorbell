@@ -14,6 +14,7 @@ final class DoorController: ObservableObject {
     var visitor: Profile? { arrivals.first?.profile }
     @Published private(set) var listening = false
     @Published private(set) var visiting: Door?
+    @Published private(set) var visitMode: VisitMode = .knock
     @Published private(set) var isAdmitting = false
     @Published var problem: String?
     @Published private(set) var automaticQuiet = false
@@ -234,7 +235,7 @@ final class DoorController: ObservableObject {
         hallway.noteVisit(to: door)
         let ticket = generation.advance()
         let id = UUID()
-        outgoingID = id; visiting = door; problem = nil
+        outgoingID = id; visiting = door; visitMode = .knock; problem = nil
         refreshDoorAudio()
         let mutedPreview = previewMicTask
         state.mode = .visiting(door)
@@ -250,6 +251,7 @@ final class DoorController: ObservableObject {
                 try generation.check(ticket)
                 let visit = try await backend.visit(door.id, visitID: id)
                 try generation.check(ticket)
+                self.visitMode = visit.mode
                 if let grant = visit.grant {
                     try await media.connect(grant, microphone: true, camera: true)
                     try generation.check(ticket)

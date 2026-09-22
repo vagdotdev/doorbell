@@ -117,5 +117,6 @@ struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     let from: Profile
     let text: String
+    var sticker: Sticker? = nil
     let at = Date()
 }

@@ -21,37 +21,40 @@ final class RoomSession: ObservableObject {
     @Published var peopleOpen = false
     @Published private(set) var chat: [ChatMessage] = []
     @Published private(set) var unread = 0
+    /// Friends' custom sticker pictures, by hash. Gone when the room is.
+    @Published private(set) var stickerArt: [String: Data] = [:]
 
     private(set) var me: Profile?
     let media: MediaSession
     private let isLive: Bool
+    private let onIncomingMessage: () -> Void
+    private let myArt: (String) -> Data?
     /// Synchronously invalidates pending work when the window closes.
     var onLeave: (() -> Void)?
 
     private var sessionID = UUID()
     private var others: [Profile] = []
     private var mediaSink: AnyCancellable?
+    private var artOrder: [String] = []
+    /// Who here already holds each custom picture, so repeat sends carry only its name.
+    private var artHolders: [String: Set<String>] = [:]
+    private var artUploads: [String: Task<Void, Error>] = [:]
 
     init(media: MediaSession, isLive: Bool = AppConfig.current.isLive,
-         onIncomingMessage: @escaping () -> Void = { Sounds.chatMessage() }) {
+         onIncomingMessage: @escaping () -> Void = { Sounds.chatMessage() },
+         myArt: @escaping (String) -> Data? = { StickerLibrary.shared.data(for: $0) }) {
         self.isLive = isLive
         self.media = media
+        self.onIncomingMessage = onIncomingMessage
+        self.myArt = myArt
         mediaSink = media.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.objectWillChange.send(); self?.rebuild() } }
-        media.onData = { [weak self] data, topic, from in
-            guard topic == "chat", data.count <= 4_000,
-                  let self, self.isActive,
-                  let from, !from.isEmpty, from != self.me?.handle, from != self.me?.id,
-                  let text = String(data: data, encoding: .utf8),
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            let sender = self.participants.first { $0.id == from }?.profile
-                ?? Profile(id: from, handle: from, displayName: from, avatarURL: nil)
-            self.chat.append(ChatMessage(from: sender, text: text))
-            if self.chat.count > 200 { self.chat.removeFirst(self.chat.count - 200) }
-            if !self.chatOpen { self.unread += 1 }
-            onIncomingMessage()
+        media.onData = { [weak self] data, topic, from in self?.receive(data, topic: topic, from: from) }
+        media.onBytes = { [weak self] data, topic, attributes, from in
+            self?.receiveArt(data, topic: topic, attributes: attributes, from: from)
         }
+        media.acceptBytes(topic: Sticker.artTopic, limit: Sticker.maxArtBytes)
     }
 
     func start(host: String, me: Profile, others: [Profile]) {
@@ -93,6 +96,11 @@ final class RoomSession: ObservableObject {
         devicesOpen = false
         me = nil
         host = ""
+        stickerArt = [:]
+        artOrder = []
+        artHolders = [:]
+        artUploads.values.forEach { $0.cancel() }
+        artUploads = [:]
     }
 
     func send(_ text: String) async -> Bool {
@@ -106,14 +114,90 @@ final class RoomSession: ObservableObject {
         do {
             if isLive { try await media.send(Data(trimmed.utf8), topic: "chat") }
             guard isActive, ticket == sessionID else { return false }
-            chat.append(ChatMessage(from: me, text: trimmed))
-            if chat.count > 200 { chat.removeFirst(chat.count - 200) }
+            append(ChatMessage(from: me, text: trimmed))
             problem = nil
             return true
         } catch {
             problem = "Message wasn’t sent. Your text is still here."
             return false
         }
+    }
+
+    func send(_ sticker: Sticker) async -> Bool {
+        guard let me else { return false }
+        let ticket = sessionID
+        do {
+            if isLive {
+                if case .custom(let hash) = sticker { try await shareArt(hash) }
+                guard ticket == sessionID else { return false }
+                try await media.send(sticker.wire, topic: Sticker.topic)
+            }
+            guard isActive, ticket == sessionID else { return false }
+            append(ChatMessage(from: me, text: sticker.alt, sticker: sticker))
+            problem = nil
+            return true
+        } catch {
+            if ticket == sessionID { problem = "Sticker wasn’t sent. Try again." }
+            return false
+        }
+    }
+
+    /// A custom sticker's picture: mine, or one a friend sent here.
+    func art(_ hash: String) -> Data? { myArt(hash) ?? stickerArt[hash] }
+
+    /// The picture goes only to people here who don't hold it yet. A burst of the same
+    /// sticker shares one upload.
+    private func shareArt(_ hash: String) async throws {
+        if let upload = artUploads[hash] { try await upload.value }
+        let missing = media.peers.map(\.id).filter { !(artHolders[hash]?.contains($0) ?? false) }
+        guard !missing.isEmpty else { return }
+        guard let art = art(hash) else { throw MediaSession.MediaFailure.unavailable }
+        let ticket = sessionID
+        let upload = Task { [media] in
+            try await media.sendBytes(art, topic: Sticker.artTopic, attributes: ["hash": hash], to: missing)
+            if ticket == sessionID { artHolders[hash, default: []].formUnion(missing) }
+        }
+        artUploads[hash] = upload
+        defer { if artUploads[hash] == upload { artUploads[hash] = nil } }
+        try await upload.value
+    }
+
+    private func receive(_ data: Data, topic: String, from: String?) {
+        guard isActive, data.count <= 4_000,
+              let from, !from.isEmpty, from != me?.handle, from != me?.id else { return }
+        let sender = participants.first { $0.id == from }?.profile
+            ?? Profile(id: from, handle: from, displayName: from, avatarURL: nil)
+        switch topic {
+        case "chat":
+            guard let text = String(data: data, encoding: .utf8),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            append(ChatMessage(from: sender, text: text))
+        case Sticker.topic:
+            guard let sticker = Sticker(wire: data) else { return }
+            append(ChatMessage(from: sender, text: sticker.alt, sticker: sticker))
+        default:
+            return
+        }
+        if !chatOpen { unread += 1 }
+        onIncomingMessage()
+    }
+
+    /// Kept only when the bytes really are the picture they claim to be.
+    private func receiveArt(_ data: Data, topic: String, attributes: [String: String], from: String?) {
+        guard isActive, topic == Sticker.artTopic, let from, !from.isEmpty, from != me?.handle,
+              let hash = attributes["hash"], Sticker.isHash(hash), stickerArt[hash] == nil,
+              data.count <= Sticker.maxArtBytes, StickerImport.hash(data) == hash,
+              StickerImport.isImage(data) else { return }
+        stickerArt[hash] = data
+        artOrder.append(hash)
+        while artOrder.count > 1, stickerArt.values.reduce(0, { $0 + $1.count }) > 40 * 1024 * 1024 {
+            stickerArt[artOrder.removeFirst()] = nil
+        }
+    }
+
+    private func append(_ message: ChatMessage) {
+        chat.append(message)
+        if chat.count > 200 { chat.removeFirst(chat.count - 200) }
     }
 
     // One side panel at a time.
@@ -131,6 +215,11 @@ final class RoomSession: ObservableObject {
 
     private func rebuild() {
         guard isActive, let me else { return }
+        // Someone who left and came back starts with an empty room: resend their pictures.
+        let present = Set(media.peers.map(\.id))
+        if artHolders.values.contains(where: { !$0.isSubset(of: present) }) {
+            artHolders = artHolders.mapValues { $0.intersection(present) }
+        }
         var list = [RoomParticipant(id: me.id, profile: me, isLocal: true, isHost: me.handle == host,
                                     micOn: micOn, camOn: camOn, video: media.localVideo)]
         if media.isConnected {

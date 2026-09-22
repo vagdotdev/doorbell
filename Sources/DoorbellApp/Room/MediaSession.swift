@@ -43,6 +43,8 @@ class MediaSession: ObservableObject {
     private(set) var playbackGain: Double = 0
     private var playbackRamp: Task<Void, Never>?
     var onData: ((Data, String, String?) -> Void)?
+    /// A finished byte stream: bytes, topic, attributes, sender identity.
+    var onBytes: ((Data, String, [String: String], String?) -> Void)?
 
     private let room = Room(roomOptions: RoomOptions(
         defaultAudioCaptureOptions: AudioCaptureOptions(
@@ -220,6 +222,37 @@ class MediaSession: ObservableObject {
     func send(_ data: Data, topic: String) async throws {
         guard isConnected, data.count <= 4_000 else { throw MediaFailure.unavailable }
         try await room.localParticipant.publish(data: data, options: DataPublishOptions(topic: topic, reliable: true))
+    }
+
+    /// Larger payloads, to chosen people only. The SDK chunks them.
+    func sendBytes(_ data: Data, topic: String, attributes: [String: String], to identities: [String]) async throws {
+        guard isConnected, !identities.isEmpty else { throw MediaFailure.unavailable }
+        let writer = try await room.localParticipant.streamBytes(options: StreamByteOptions(
+            topic: topic, attributes: attributes,
+            destinationIdentities: identities.map { Participant.Identity(from: $0) },
+            totalSize: data.count))
+        try await writer.write(data)
+        try await writer.close()
+    }
+
+    /// Deliver byte streams on `topic` to `onBytes`. Anything over `limit` is dropped.
+    func acceptBytes(topic: String, limit: Int) {
+        Task {
+            try? await room.registerByteStreamHandler(for: topic) { [weak self] reader, sender in
+                if let total = reader.info.totalLength, total > limit { return }
+                var data = Data()
+                for try await chunk in reader {
+                    data.append(chunk)
+                    if data.count > limit { return }
+                }
+                let received = data, attributes = reader.info.attributes
+                await self?.deliverBytes(received, topic: topic, attributes: attributes, from: sender.stringValue)
+            }
+        }
+    }
+
+    private func deliverBytes(_ data: Data, topic: String, attributes: [String: String], from: String) {
+        onBytes?(data, topic, attributes, from)
     }
 
     private func enqueue(_ body: @escaping @MainActor () async throws -> Void) async throws {

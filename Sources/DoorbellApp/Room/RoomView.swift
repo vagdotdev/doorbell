@@ -372,9 +372,14 @@ private struct PeopleDrawer: View {
 
 private struct ChatDrawer: View {
     @EnvironmentObject private var room: RoomSession
+    @ObservedObject private var library = StickerLibrary.shared
     @State private var draft = ""
+    @State private var stickersOpen = false
+    @FocusState private var typing: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let runs = ChatRun.runs(room.chat)
         VStack(alignment: .leading, spacing: 0) {
             Text("Chat")
                 .font(.system(size: 13, weight: .semibold))
@@ -386,36 +391,71 @@ private struct ChatDrawer: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(room.chat) { m in
-                            VStack(alignment: .leading, spacing: 2) {
+                        ForEach(runs) { run in
+                            VStack(alignment: .leading, spacing: run.first.sticker == nil ? 2 : 4) {
                                 HStack(spacing: 6) {
-                                    Text(m.from.id == room.me?.id ? "You" : m.from.displayName)
+                                    Text(run.first.from.id == room.me?.id ? "You" : run.first.from.displayName)
                                         .font(.system(size: 11, weight: .semibold))
                                         .foregroundStyle(DesignTokens.inkSecondary)
-                                    Text(m.at, style: .time)
+                                    Text(run.first.at, style: .time)
                                         .font(.system(size: 10))
                                         .foregroundStyle(DesignTokens.inkTertiary)
                                 }
-                                Text(m.text)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(DesignTokens.ink)
-                                    .textSelection(.enabled)
+                                if run.first.sticker != nil {
+                                    StickerFlow(spacing: 4) {
+                                        ForEach(run.messages) { ChatSticker(message: $0, library: library) }
+                                    }
+                                    .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.62),
+                                               value: run.messages.count)
+                                } else {
+                                    Text(run.first.text)
+                                        .font(.system(size: run.first.text.isJumboEmoji ? 30 : 13))
+                                        .foregroundStyle(DesignTokens.ink)
+                                        .textSelection(.enabled)
+                                }
                             }
-                            .id(m.id)
+                            .id(run.id)
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
                 }
-                .onChange(of: room.chat.count) { _, _ in
-                    if let last = room.chat.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .defaultScrollAnchor(.bottom, for: .sizeChanges)
+                // The last id, not the count: at the 200-message cap the count stops moving.
+                .onChange(of: room.chat.last?.id) { _, _ in
+                    if let last = runs.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+                // Opening the tray shrinks the list after this pass; scroll once it has.
+                .onChange(of: stickersOpen) { _, _ in
+                    guard let last = runs.last else { return }
+                    Task { @MainActor in proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
 
+            if stickersOpen {
+                StickerTray(onPick: send, onEmoji: openEmoji, library: library)
+                    .padding(.horizontal, 12)
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+
             HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeOut(duration: reduceMotion ? 0.12 : 0.2)) { stickersOpen.toggle() }
+                } label: {
+                    Image(systemName: stickersOpen ? "face.smiling.inverse" : "face.smiling")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(stickersOpen ? DesignTokens.utility : DesignTokens.inkSecondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(stickersOpen ? "Hide stickers" : "Stickers")
+                .accessibilityLabel(stickersOpen ? "Hide stickers" : "Stickers")
                 TextField("Message", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
+                    .focused($typing)
                     .onSubmit(send)
                 Button(action: send) {
                     Image(systemName: "arrow.up")
@@ -440,4 +480,43 @@ private struct ChatDrawer: View {
         let text = draft
         Task { if await room.send(text), draft == text { draft = "" } }
     }
+
+    private func send(_ sticker: Sticker) {
+        Task { if await room.send(sticker) { library.noteSent(sticker) } }
+    }
+
+    /// The system palette types into whatever has focus: the message field.
+    private func openEmoji() {
+        typing = true
+        DispatchQueue.main.async { NSApp.orderFrontCharacterPalette(nil) }
+    }
+}
+
+private struct ChatSticker: View {
+    let message: ChatMessage
+    @ObservedObject var library: StickerLibrary
+    @EnvironmentObject private var room: RoomSession
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if let sticker = message.sticker {
+            StickerView(sticker: sticker, size: 72, art: art(sticker))
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
+                .contextMenu {
+                    Button("Send Again") { Task { if await room.send(sticker) { library.noteSent(sticker) } } }
+                    if case .custom(let hash) = sticker, !library.mine.contains(hash), let art = art(sticker) {
+                        Button("Add to My Stickers") { try? library.keep(art) }
+                    }
+                }
+        }
+    }
+
+    private func art(_ sticker: Sticker) -> Data? {
+        if case .custom(let hash) = sticker { room.art(hash) } else { nil }
+    }
+}
+
+private extension String {
+    /// One to three emoji and nothing else: shown big, like a sticker.
+    var isJumboEmoji: Bool { (1...3).contains(count) && allSatisfy { Sticker.isEmoji(String($0)) } }
 }
