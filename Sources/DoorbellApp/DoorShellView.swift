@@ -388,7 +388,7 @@ private struct ShellBody: View {
             } else {
             switch state.mode {
             case .building: BuildingView().transition(.opacity)
-            case .shelf: ShelfPlaceholder().transition(.opacity)
+            case .shelf: ShelfView().transition(.opacity)
             case .search: SearchView().transition(.opacity)
             case .requests: RequestsView().transition(.opacity)
             case .settings: SettingsView().transition(.opacity)
@@ -398,18 +398,5 @@ private struct ShellBody: View {
         }
         .animation(.easeInOut(duration: 0.18), value: state.mode)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct ShelfPlaceholder: View {
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "tray")
-                .font(.system(size: 20, weight: .light))
-                .foregroundStyle(DesignTokens.inkTertiary)
-            Text("Empty")
-                .font(.system(size: 12))
-                .foregroundStyle(DesignTokens.inkTertiary)
-        }
     }
 }
