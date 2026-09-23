@@ -27,7 +27,7 @@ struct PhotoBoothDrawer: View {
                             }
                         }
                     }
-                    ShutterButton(booth: booth)
+                    ShutterButton(booth: booth, canShoot: booth.canShoot)
                     if !booth.canShoot {
                         Text("Turn on a camera to take a picture.")
                             .font(.system(size: 11))
@@ -229,6 +229,9 @@ private struct FilterChip: View {
 /// The big round button. Press it and the whole room counts down with you.
 private struct ShutterButton: View {
     @ObservedObject var booth: PhotoBoothSession
+    /// Passed in, not read from `booth`: in the mock it hinges on the camera feed,
+    /// which this view doesn't observe, so reading it here would go stale.
+    let canShoot: Bool
 
     private var busy: Bool { booth.phase != .idle }
 
@@ -238,11 +241,11 @@ private struct ShutterButton: View {
         } label: {
             ZStack {
                 Circle()
-                    .strokeBorder(.white.opacity(booth.canShoot && !busy ? 0.9 : 0.3), lineWidth: 3)
+                    .strokeBorder(.white.opacity(canShoot && !busy ? 0.9 : 0.3), lineWidth: 3)
                     .frame(width: 56, height: 56)
                 Circle()
                     .fill(Color(red: 0.965, green: 0.945, blue: 0.905)
-                        .opacity(booth.canShoot && !busy ? 1 : 0.3))
+                        .opacity(canShoot && !busy ? 1 : 0.3))
                     .frame(width: 44, height: 44)
                 if case .countdown(let count) = booth.phase {
                     Text("\(count)")
@@ -253,7 +256,7 @@ private struct ShutterButton: View {
             }
         }
         .buttonStyle(ShutterPress())
-        .disabled(!booth.canShoot || busy)
+        .disabled(!canShoot || busy)
         .help("Take a photo — everyone gets a copy")
         .accessibilityLabel("Take a photo")
         .animation(.easeOut(duration: 0.2), value: booth.phase)
