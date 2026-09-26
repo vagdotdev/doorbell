@@ -11,7 +11,7 @@ The room is a call window: faces, mic, camera, screen share, and chat. Nothing i
 Apple silicon, macOS 15 or later. This downloads the latest release, checks the checksum and signature, and installs to `/Applications`.
 
 ```sh
-curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh
+curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh && xattr -cr /Applications/Doorbell.app && open /Applications/Doorbell.app
 ```
 
 First launch is a window: your name, a permanent @handle, then camera and microphone. After that, Doorbell lives in the notch.
