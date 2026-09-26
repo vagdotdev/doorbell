@@ -49,7 +49,8 @@ struct ShelfView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(DesignTokens.utility)
             }
-            .padding(.bottom, 12)
+            // Clears the "by vagdev" credit the board draws 6pt off its bottom edge.
+            .padding(.bottom, 24)
         }
         .padding(.top, 6)
     }
