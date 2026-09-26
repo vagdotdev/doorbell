@@ -345,6 +345,10 @@ final class PhotoBoothSession: ObservableObject {
         let url: URL
         let filter: BoothFilter
 
+        /// Width over height of the printed paper. The image already is the Polaroid:
+        /// show it whole, never cropped into another frame.
+        var aspect: CGFloat { CGFloat(image.width) / CGFloat(max(image.height, 1)) }
+
         static func == (a: Shot, b: Shot) -> Bool { a.id == b.id }
     }
 

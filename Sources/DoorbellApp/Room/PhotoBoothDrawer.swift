@@ -303,19 +303,11 @@ private struct MiniPolaroid: View {
         Button {
             NSWorkspace.shared.open(shot.url)
         } label: {
-            VStack(spacing: 0) {
-                Image(shot.image, scale: PolaroidComposer.scale, label: Text("Photo"))
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 58, height: 58)
-                    .clipped()
-                    .padding(4)
-                Spacer(minLength: 0)
-            }
-            .frame(width: 66, height: 78)
-            .background(Color(red: 0.965, green: 0.945, blue: 0.905))
-            .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
-            .rotationEffect(.degrees(tilt))
+            Image(shot.image, scale: PolaroidComposer.scale, label: Text("Photo"))
+                .resizable()
+                .frame(width: 78 * shot.aspect, height: 78)
+                .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
+                .rotationEffect(.degrees(tilt))
         }
         .buttonStyle(.plain)
         .help("Open the photo")
@@ -378,9 +370,7 @@ struct BoothToast: View {
                     HStack(spacing: 8) {
                         Image(shot.image, scale: PolaroidComposer.scale, label: Text("Photo"))
                             .resizable()
-                            .scaledToFill()
-                            .frame(width: 28, height: 28)
-                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            .frame(width: 30 * shot.aspect, height: 30)
                         Text("Saved to Photo Booth")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(DesignTokens.ink)

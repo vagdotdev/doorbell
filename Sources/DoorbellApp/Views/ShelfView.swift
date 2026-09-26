@@ -64,6 +64,18 @@ private struct FridgePolaroid: View {
 
     private static let paper = Color(red: 0.965, green: 0.945, blue: 0.905)
     private static let magnets: [Color] = [DesignTokens.social, DesignTokens.utility, DesignTokens.horizon]
+    /// Four of the widest paper still fit the 480pt board.
+    private static let box = CGSize(width: 100, height: 118)
+
+    /// The file already is the Polaroid: fit it whole, at its own shape.
+    private var size: CGSize {
+        guard let image = thumbnail?.image, image.width > 0, image.height > 0 else {
+            return CGSize(width: 100, height: 114)
+        }
+        let w = CGFloat(image.width), h = CGFloat(image.height)
+        let fit = min(Self.box.width / w, Self.box.height / h)
+        return CGSize(width: w * fit, height: h * fit)
+    }
 
     /// Stable per file, so the shelf doesn't reshuffle every open. djb2, like AvatarView.
     private var tilt: Double {
@@ -76,23 +88,14 @@ private struct FridgePolaroid: View {
         Button {
             NSWorkspace.shared.open(url)
         } label: {
-            VStack(spacing: 0) {
-                ZStack {
-                    Color(white: 0.14)
-                    if let thumbnail {
-                        Image(thumbnail.image, scale: 2, label: Text("Photo"))
-                            .resizable()
-                            .scaledToFill()
-                    }
+            ZStack {
+                Self.paper
+                if let thumbnail {
+                    Image(thumbnail.image, scale: 2, label: Text("Photo"))
+                        .resizable()
                 }
-                .frame(width: 86, height: 86)
-                .clipped()
-                .padding(.horizontal, 5)
-                .padding(.top, 5)
-                Spacer(minLength: 0)
             }
-            .frame(width: 96, height: 118)
-            .background(Self.paper)
+            .frame(width: size.width, height: size.height)
             .shadow(color: .black.opacity(0.5), radius: 6, y: 3)
             .overlay(alignment: .top) {
                 Circle()
