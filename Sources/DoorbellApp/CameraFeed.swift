@@ -13,6 +13,10 @@ final class CameraFeed: ObservableObject {
     @Published private(set) var status: Status = .idle
 
     let session = AVCaptureSession()
+    /// The newest frame while a preview is running: the mock room's photo booth
+    /// face. Cleared with the camera, so no picture outlives the light.
+    var latestFrame: CVPixelBuffer? { sink.latest }
+    private let sink = LatestFrameSink()
     private var refs = 0
     private var generation = 0
     private(set) var startTask: Task<Void, Never>?
@@ -47,7 +51,8 @@ final class CameraFeed: ObservableObject {
         if let captureStop { captureStop() }
         else {
             let session = self.session
-            queue.async { session.stopRunning() }
+            let sink = self.sink
+            queue.async { session.stopRunning(); sink.clear() }
         }
         status = .idle
     }
@@ -71,6 +76,8 @@ final class CameraFeed: ObservableObject {
 
     private func startSession() async -> Bool {
         let session = self.session
+        let sink = self.sink
+        let queue = self.queue
         return await withCheckedContinuation { cont in
             queue.async {
                 if session.inputs.isEmpty {
@@ -81,6 +88,12 @@ final class CameraFeed: ObservableObject {
                        session.canAddInput(input) {
                         session.addInput(input)
                     }
+                    if !session.inputs.isEmpty, session.outputs.isEmpty {
+                        let output = AVCaptureVideoDataOutput()
+                        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+                        output.setSampleBufferDelegate(sink, queue: queue)
+                        if session.canAddOutput(output) { session.addOutput(output) }
+                    }
                     session.commitConfiguration()
                 }
                 guard !session.inputs.isEmpty else { return cont.resume(returning: false) }
@@ -88,6 +101,21 @@ final class CameraFeed: ObservableObject {
                 cont.resume(returning: true)
             }
         }
+    }
+}
+
+/// Keeps only the newest frame; conversion to a picture happens at the shutter.
+private final class LatestFrameSink: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var frame: CVPixelBuffer?
+
+    var latest: CVPixelBuffer? { lock.withLock { frame } }
+    func clear() { lock.withLock { frame = nil } }
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
+                       from connection: AVCaptureConnection) {
+        guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        lock.withLock { frame = buffer }
     }
 }
 

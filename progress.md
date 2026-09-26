@@ -30,6 +30,8 @@ Done: occupied knock is Add to this call / End this call (`docs/bring-in-plan.md
 
 Done: stickers in room chat — animated Noto emoji roll, your own stickers sent peer-to-peer, system emoji palette.
 
+Done: Room Photo Booth — synced 3-2-1 shutter, three film looks, Polaroids saved to ~/Pictures/Doorbell/Photo Booth; the Shelf pins the newest four like fridge magnets.
+
 Now: Fresh Ring auto-updates on launch. Publish a new DMG so friends get the path-free binary.
 Done: app loads Sounds/Portraits from the installed bundle (no SwiftPM /Users/…/.build path); strip Xcode rpaths at pack time.
 

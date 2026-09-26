@@ -23,6 +23,7 @@ struct RoomView: View {
                     .padding(.vertical, 14)
             }
             .frame(maxWidth: .infinity)
+            .overlay { BoothCountdown(booth: room.booth) }
 
             if room.peopleOpen {
                 PeopleDrawer()
@@ -32,9 +33,18 @@ struct RoomView: View {
                 ChatDrawer()
                     .frame(width: 300)
                     .transition(drawerTransition)
+            } else if room.boothOpen {
+                PhotoBoothDrawer(booth: room.booth)
+                    .frame(width: 300)
+                    .transition(drawerTransition)
             }
         }
         .background(RoomBackdrop())
+        .overlay { BoothFlash(booth: room.booth) }
+        .overlay(alignment: .top) {
+            BoothToast(booth: room.booth, drawerOpen: room.boothOpen)
+                .padding(.top, 8)
+        }
         .overlay(alignment: .topTrailing) {
             // Someone knocked while we're talking. Same choice as the notch, here too.
             if let visitor = door.visitor {
@@ -46,6 +56,7 @@ struct RoomView: View {
         }
         .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.chatOpen)
         .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.peopleOpen)
+        .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.boothOpen)
         .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.2), value: door.visitor)
         .sheet(isPresented: $room.sharePickerOpen) { SharePicker(media: room.media) }
         .sheet(isPresented: $room.devicesOpen) { DevicePicker(media: room.media) }
@@ -260,6 +271,8 @@ private struct ControlBar: View {
                         tint: room.peopleOpen ? .active : .neutral) { room.togglePeople() }
             RoomControl(label: "Chat", symbol: "bubble.left.fill",
                         tint: room.chatOpen ? .active : .neutral, badge: room.unread) { room.toggleChat() }
+            RoomControl(label: "Photo Booth", symbol: "camera.fill",
+                        tint: room.boothOpen ? .active : .neutral) { room.toggleBooth() }
             RoomControl(label: "Leave room", symbol: "phone.down.fill", tint: .leave, wide: true) {
                 door.closeRoom()
             }

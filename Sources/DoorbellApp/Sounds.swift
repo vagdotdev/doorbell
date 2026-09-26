@@ -15,8 +15,11 @@ enum Sounds {
 
     private static var knockPlayer: AVAudioPlayer?
     private static var chatPlayer: AVAudioPlayer?
+    private static var boothPlayer: AVAudioPlayer?
     private static var chatThrottle = ChatCueThrottle()
     private static let chatData = makeChatTone()
+    private static let boothTickData = makeBoothTick()
+    private static let shutterData = makeShutter()
 
     /// A small cue, including when the chat is already open. Burst messages stay quiet.
     static func chatMessage() {
@@ -48,6 +51,66 @@ enum Sounds {
             var sample = Int16((value * Double(Int16.max)).rounded()).littleEndian
             withUnsafeBytes(of: &sample) { pcm.append(contentsOf: $0) }
         }
+        return wav(pcm, sampleRate: sampleRate)
+    }
+
+    /// The photo booth's count: one short, soft blip per number.
+    static func boothTick() {
+        guard enabled, let player = try? AVAudioPlayer(data: boothTickData) else { return }
+        boothPlayer?.stop()
+        player.volume = 0.14
+        player.play()
+        boothPlayer = player
+    }
+
+    /// The shutter: two dry clicks, "ka-chk". Noise, not tone — a mechanism, not a chime.
+    static func shutter() {
+        guard enabled, let player = try? AVAudioPlayer(data: shutterData) else { return }
+        boothPlayer?.stop()
+        player.volume = 0.3
+        player.play()
+        boothPlayer = player
+    }
+
+    private static func makeBoothTick() -> Data {
+        let sampleRate = 48_000
+        let sampleCount = Int(0.09 * Double(sampleRate))
+        var pcm = Data(capacity: sampleCount * 2)
+        for index in 0..<sampleCount {
+            let time = Double(index) / Double(sampleRate)
+            let attack = min(time / 0.004, 1)
+            let value = 0.32 * sin(2 * .pi * 1180 * time) * attack * exp(-38 * time)
+            var sample = Int16((value * Double(Int16.max)).rounded()).littleEndian
+            withUnsafeBytes(of: &sample) { pcm.append(contentsOf: $0) }
+        }
+        return wav(pcm, sampleRate: sampleRate)
+    }
+
+    private static func makeShutter() -> Data {
+        let sampleRate = 48_000
+        let sampleCount = Int(0.14 * Double(sampleRate))
+        var pcm = Data(capacity: sampleCount * 2)
+        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func noise() -> Double {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Double(Int64(bitPattern: state)) / Double(Int64.max)
+        }
+        for index in 0..<sampleCount {
+            let time = Double(index) / Double(sampleRate)
+            func click(start: Double, level: Double, decay: Double) -> Double {
+                let t = time - start
+                guard t >= 0 else { return 0 }
+                return level * noise() * exp(-t * decay)
+            }
+            let value = click(start: 0, level: 0.5, decay: 900) + click(start: 0.06, level: 0.35, decay: 700)
+            var sample = Int16((max(-1, min(1, value)) * Double(Int16.max)).rounded()).littleEndian
+            withUnsafeBytes(of: &sample) { pcm.append(contentsOf: $0) }
+        }
+        return wav(pcm, sampleRate: sampleRate)
+    }
+
+    /// 16-bit mono PCM in a RIFF wrapper, playable by AVAudioPlayer without an asset.
+    private static func wav(_ pcm: Data, sampleRate: Int) -> Data {
         var wav = Data("RIFF".utf8)
         func append32(_ value: UInt32) {
             var little = value.littleEndian

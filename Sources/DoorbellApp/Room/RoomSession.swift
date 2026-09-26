@@ -19,6 +19,7 @@ final class RoomSession: ObservableObject {
     @Published var problem: String?
     @Published var chatOpen = false
     @Published var peopleOpen = false
+    @Published var boothOpen = false
     @Published private(set) var chat: [ChatMessage] = []
     @Published private(set) var unread = 0
     /// Friends' custom sticker pictures, by hash. Gone when the room is.
@@ -26,6 +27,8 @@ final class RoomSession: ObservableObject {
 
     private(set) var me: Profile?
     let media: MediaSession
+    /// The room's photo booth: everyone's face on Polaroid paper, one synced shutter.
+    let booth: PhotoBoothSession
     private let isLive: Bool
     private let onIncomingMessage: () -> Void
     private let myArt: (String) -> Data?
@@ -45,6 +48,7 @@ final class RoomSession: ObservableObject {
          myArt: @escaping (String) -> Data? = { StickerLibrary.shared.data(for: $0) }) {
         self.isLive = isLive
         self.media = media
+        self.booth = PhotoBoothSession(media: media, isLive: isLive)
         self.onIncomingMessage = onIncomingMessage
         self.myArt = myArt
         mediaSink = media.objectWillChange
@@ -92,6 +96,8 @@ final class RoomSession: ObservableObject {
         unread = 0
         chatOpen = false
         peopleOpen = false
+        boothOpen = false
+        booth.reset()
         sharePickerOpen = false
         devicesOpen = false
         me = nil
@@ -175,6 +181,10 @@ final class RoomSession: ObservableObject {
         case Sticker.topic:
             guard let sticker = Sticker(wire: data) else { return }
             append(ChatMessage(from: sender, text: sticker.alt, sticker: sticker))
+        case PhotoBoothSession.topic:
+            // A photo, not a message: no unread badge, no chat cue.
+            booth.receive(data)
+            return
         default:
             return
         }
@@ -203,12 +213,17 @@ final class RoomSession: ObservableObject {
     // One side panel at a time.
     func toggleChat() {
         chatOpen.toggle()
-        if chatOpen { unread = 0; peopleOpen = false }
+        if chatOpen { unread = 0; peopleOpen = false; boothOpen = false }
     }
 
     func togglePeople() {
         peopleOpen.toggle()
-        if peopleOpen { chatOpen = false }
+        if peopleOpen { chatOpen = false; boothOpen = false }
+    }
+
+    func toggleBooth() {
+        boothOpen.toggle()
+        if boothOpen { chatOpen = false; peopleOpen = false }
     }
 
     // MARK: -
@@ -238,6 +253,7 @@ final class RoomSession: ObservableObject {
             list += others.map { RoomParticipant(id: $0.id, profile: $0, isLocal: false, isHost: $0.handle == host) }
         }
         if list != participants { participants = list }
+        booth.attach(list)
     }
 
 }
