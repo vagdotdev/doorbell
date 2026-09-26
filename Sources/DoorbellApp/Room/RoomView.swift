@@ -255,6 +255,10 @@ private struct ParticipantTile: View {
 private struct ControlBar: View {
     @EnvironmentObject private var room: RoomSession
     @EnvironmentObject private var door: DoorController
+    @State private var extrasOpen = false
+    /// The transient popover closes on the mouse-down that lands on its own button;
+    /// that same click must not open it straight back up.
+    @State private var extrasClosedAt = Date.distantPast
 
     var body: some View {
         HStack(spacing: 10) {
@@ -271,8 +275,17 @@ private struct ControlBar: View {
                         tint: room.peopleOpen ? .active : .neutral) { room.togglePeople() }
             RoomControl(label: "Chat", symbol: "bubble.left.fill",
                         tint: room.chatOpen ? .active : .neutral, badge: room.unread) { room.toggleChat() }
-            RoomControl(label: "Photo Booth", glyph: AnyView(PhotoStripGlyph()),
-                        tint: room.boothOpen ? .active : .neutral) { room.toggleBooth() }
+            RoomControl(label: "More", symbol: "ellipsis",
+                        tint: extrasOpen || room.boothOpen ? .active : .neutral) {
+                if Date().timeIntervalSince(extrasClosedAt) > 0.3 { extrasOpen.toggle() }
+            }
+            .popover(isPresented: $extrasOpen, arrowEdge: .top) {
+                RoomExtras(boothOpen: room.boothOpen) {
+                    room.toggleBooth()
+                    extrasOpen = false
+                }
+            }
+            .onChange(of: extrasOpen) { _, open in if !open { extrasClosedAt = Date() } }
             RoomControl(label: "Leave room", symbol: "phone.down.fill", tint: .leave, wide: true) {
                 door.closeRoom()
             }
@@ -280,13 +293,55 @@ private struct ControlBar: View {
     }
 }
 
+/// Everything past the everyday controls opens up from ⋯, so the bar itself never
+/// grows. The photo booth is the first thing in here.
+private struct RoomExtras: View {
+    let boothOpen: Bool
+    let toggleBooth: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: toggleBooth) {
+            HStack(spacing: 10) {
+                PhotoStripGlyph()
+                    .foregroundStyle(boothOpen ? .black : .white)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(boothOpen ? DesignTokens.utility : .white.opacity(0.10)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Photo Booth")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(DesignTokens.ink)
+                    Text("A Polaroid of everyone here")
+                        .font(.system(size: 11))
+                        .foregroundStyle(DesignTokens.inkTertiary)
+                }
+                Spacer(minLength: 0)
+                if boothOpen {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(DesignTokens.utility)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 46)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(hovering ? DesignTokens.raised : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(boothOpen ? "Close Photo Booth" : "Open Photo Booth")
+        .padding(6)
+        .frame(width: 244)
+        .preferredColorScheme(.dark)
+    }
+}
+
 private struct RoomControl: View {
     enum Tint { case neutral, off, active, leave }
 
     let label: String
-    var symbol = ""
-    /// Drawn in place of `symbol` when SF Symbols has nothing that fits.
-    var glyph: AnyView?
+    let symbol: String
     let tint: Tint
     var badge = 0
     var wide = false
@@ -304,9 +359,8 @@ private struct RoomControl: View {
 
     var body: some View {
         Button(action: action) {
-            Group {
-                if let glyph { glyph } else { Image(systemName: symbol).font(.system(size: 15, weight: .medium)) }
-            }
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(tint == .active ? .black : .white)
                 .frame(width: wide ? 64 : 44, height: 44)
                 .background(Capsule().fill(fill))

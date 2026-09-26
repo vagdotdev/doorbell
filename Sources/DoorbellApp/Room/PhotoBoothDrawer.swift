@@ -188,9 +188,9 @@ private struct BoothLook: ViewModifier {
 
 // MARK: - Controls
 
-/// The booth's button in the room: a photo strip, three frames down the paper and a
-/// deeper foot, tipped like it just slid out of the slot. Solid, with the frames cut
-/// out, to sit with the filled SF Symbols beside it — which have no photo strip.
+/// The booth's icon in the room's ⋯ menu: a photo strip, three frames down the paper
+/// and a deeper foot, tipped like it just slid out of the slot. Solid, with the frames
+/// cut out, to match the filled SF Symbols — which have no photo strip.
 struct PhotoStripGlyph: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 2, style: .continuous)
