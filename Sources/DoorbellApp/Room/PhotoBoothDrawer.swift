@@ -188,6 +188,29 @@ private struct BoothLook: ViewModifier {
 
 // MARK: - Controls
 
+/// The booth's button in the room: a photo strip, three frames down the paper and a
+/// deeper foot, tipped like it just slid out of the slot. Solid, with the frames cut
+/// out, to sit with the filled SF Symbols beside it — which have no photo strip.
+struct PhotoStripGlyph: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .frame(width: 9.5, height: 17)
+            .overlay(alignment: .top) {
+                VStack(spacing: 1.2) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 0.8, style: .continuous)
+                            .frame(width: 6.3, height: 3.4)
+                    }
+                }
+                .padding(.top, 1.6)
+                .blendMode(.destinationOut)
+            }
+            .compositingGroup()
+            .rotationEffect(.degrees(-10))
+            .accessibilityHidden(true)
+    }
+}
+
 private struct FilterChip: View {
     let filter: BoothFilter
     let selected: Bool

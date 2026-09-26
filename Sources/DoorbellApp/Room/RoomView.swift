@@ -271,7 +271,7 @@ private struct ControlBar: View {
                         tint: room.peopleOpen ? .active : .neutral) { room.togglePeople() }
             RoomControl(label: "Chat", symbol: "bubble.left.fill",
                         tint: room.chatOpen ? .active : .neutral, badge: room.unread) { room.toggleChat() }
-            RoomControl(label: "Photo Booth", symbol: "camera.fill",
+            RoomControl(label: "Photo Booth", glyph: AnyView(PhotoStripGlyph()),
                         tint: room.boothOpen ? .active : .neutral) { room.toggleBooth() }
             RoomControl(label: "Leave room", symbol: "phone.down.fill", tint: .leave, wide: true) {
                 door.closeRoom()
@@ -284,7 +284,9 @@ private struct RoomControl: View {
     enum Tint { case neutral, off, active, leave }
 
     let label: String
-    let symbol: String
+    var symbol = ""
+    /// Drawn in place of `symbol` when SF Symbols has nothing that fits.
+    var glyph: AnyView?
     let tint: Tint
     var badge = 0
     var wide = false
@@ -302,8 +304,9 @@ private struct RoomControl: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
+            Group {
+                if let glyph { glyph } else { Image(systemName: symbol).font(.system(size: 15, weight: .medium)) }
+            }
                 .foregroundStyle(tint == .active ? .black : .white)
                 .frame(width: wide ? 64 : 44, height: 44)
                 .background(Capsule().fill(fill))
