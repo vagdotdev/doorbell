@@ -12,13 +12,17 @@ import type * as admin from "../admin.js";
 import type * as apiKeyMgmt from "../apiKeyMgmt.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as auth from "../auth.js";
+import type * as calls from "../calls.js";
 import type * as doorActions from "../doorActions.js";
 import type * as doors from "../doors.js";
 import type * as graph from "../graph.js";
 import type * as http from "../http.js";
 import type * as lib from "../lib.js";
+import type * as notes from "../notes.js";
+import type * as notify from "../notify.js";
 import type * as profiles from "../profiles.js";
 import type * as seed from "../seed.js";
+import type * as status from "../status.js";
 
 import type {
   ApiFromModules,
@@ -31,13 +35,17 @@ declare const fullApi: ApiFromModules<{
   apiKeyMgmt: typeof apiKeyMgmt;
   apiKeys: typeof apiKeys;
   auth: typeof auth;
+  calls: typeof calls;
   doorActions: typeof doorActions;
   doors: typeof doors;
   graph: typeof graph;
   http: typeof http;
   lib: typeof lib;
+  notes: typeof notes;
+  notify: typeof notify;
   profiles: typeof profiles;
   seed: typeof seed;
+  status: typeof status;
 }>;
 
 /**

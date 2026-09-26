@@ -25,6 +25,17 @@ enum FollowStatus: String, Codable, Sendable {
     case pending, accepted
 }
 
+/// A short line over someone's door, written by them: "in a meeting till 4".
+/// It lasts six hours unless they take it down. It never says whether they're home.
+struct DoorStatus: Hashable, Sendable, Codable {
+    static let maxLength = 40
+    static let lifetime: TimeInterval = 6 * 60 * 60
+    var text: String
+    var expiresAt: Date
+
+    func isShowing(at now: Date = Date()) -> Bool { expiresAt > now }
+}
+
 /// Someone you follow: a door you can knock on.
 struct Door: Identifiable, Hashable, Sendable {
     var id: String { profile.id }
@@ -33,6 +44,7 @@ struct Door: Identifiable, Hashable, Sendable {
     var followsMe: Bool
     /// On your close-friends list: they walk straight into your room.
     var isCloseFriend: Bool
+    var status: DoorStatus? = nil
 }
 
 struct HallwaySnapshot: Sendable {
@@ -42,12 +54,20 @@ struct HallwaySnapshot: Sendable {
     var requests: [Profile]
     /// Profile ids you've requested and are waiting on.
     var outgoing: Set<String>
+    var myStatus: DoorStatus? = nil
+}
+
+/// What a knock brings: my preview seat on their doorstep, ready to use, and
+/// their face at the moment they knocked. Older servers send neither.
+struct KnockPayload: Sendable, Equatable {
+    var preview: MediaGrant?
+    var still: Data?
 }
 
 /// What happened at my door.
 enum DoorEvent: Sendable, Equatable {
-    case knock(Profile, visitID: UUID = UUID())
-    case walkIn(Profile, visitID: UUID = UUID())
+    case knock(Profile, visitID: UUID = UUID(), payload: KnockPayload? = nil)
+    case walkIn(Profile, visitID: UUID = UUID(), payload: KnockPayload? = nil)
     case visitorLeft(Profile, visitID: UUID)
     /// The door I knocked on opened: who let me in, and my seat in their room.
     case admitted(Profile, MediaGrant, visitID: UUID)
@@ -56,6 +76,13 @@ enum DoorEvent: Sendable, Equatable {
 /// What the token function decided when I clicked a door.
 enum VisitMode: Sendable {
     case knock, walkIn
+}
+
+/// Finished notes for one call, hanging on a secret URL.
+struct MeetingNotes: Sendable, Equatable {
+    var text: String
+    var url: URL
+    var inboxURL: URL
 }
 
 /// A seat in a LiveKit room: where, and the signed permission to sit there.

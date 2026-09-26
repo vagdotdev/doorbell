@@ -19,10 +19,16 @@ final class RoomSession: ObservableObject {
     @Published var problem: String?
     @Published var chatOpen = false
     @Published var peopleOpen = false
+    @Published var notesOpen = false
+    @Published private(set) var notesOn = false
+    @Published private(set) var notesLines: [String] = []
+    @Published private(set) var notesResult: MeetingNotes?
+    @Published private(set) var notesWriting = false
     @Published private(set) var chat: [ChatMessage] = []
     @Published private(set) var unread = 0
     /// Friends' custom sticker pictures, by hash. Gone when the room is.
     @Published private(set) var stickerArt: [String: Data] = [:]
+    let pointers = PointerBoard()
 
     private(set) var me: Profile?
     let media: MediaSession
@@ -31,6 +37,8 @@ final class RoomSession: ObservableObject {
     private let myArt: (String) -> Data?
     /// Synchronously invalidates pending work when the window closes.
     var onLeave: (() -> Void)?
+    var onTranscribe: ((Data, String) async throws -> String)?
+    var onWriteNotes: ((String, [String], String) async throws -> MeetingNotes)?
 
     private var sessionID = UUID()
     private var others: [Profile] = []
@@ -39,6 +47,12 @@ final class RoomSession: ObservableObject {
     /// Who here already holds each custom picture, so repeat sends carry only its name.
     private var artHolders: [String: Set<String>] = [:]
     private var artUploads: [String: Task<Void, Error>] = [:]
+    private var pendingPointer: PointerMessage?
+    private var pointerSentAt: ContinuousClock.Instant?
+    private var pointerFlush: Task<Void, Never>?
+    static let pointerInterval: Duration = .milliseconds(33)
+    private var taps: [String: SpeakerTap] = [:]
+    private var notesJob: Task<Void, Never>?
 
     init(media: MediaSession, isLive: Bool = AppConfig.current.isLive,
          onIncomingMessage: @escaping () -> Void = { Sounds.chatMessage() },
@@ -49,7 +63,11 @@ final class RoomSession: ObservableObject {
         self.myArt = myArt
         mediaSink = media.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in Task { @MainActor in self?.objectWillChange.send(); self?.rebuild() } }
+            .sink { [weak self] _ in Task { @MainActor in
+                self?.objectWillChange.send()
+                self?.rebuild()
+                if self?.notesOn == true { self?.attachTaps() }
+            } }
         media.onData = { [weak self] data, topic, from in self?.receive(data, topic: topic, from: from) }
         media.onBytes = { [weak self] data, topic, attributes, from in
             self?.receiveArt(data, topic: topic, attributes: attributes, from: from)
@@ -66,6 +84,11 @@ final class RoomSession: ObservableObject {
         chat = []
         unread = 0
         peopleOpen = false
+        notesOpen = false
+        notesOn = false
+        notesLines = []
+        notesResult = nil
+        notesWriting = false
         isActive = true
         rebuild()
     }
@@ -84,6 +107,8 @@ final class RoomSession: ObservableObject {
     }
 
     func reset() {
+        let hostNow = host
+        let peopleNow = participants.map(\.profile.displayName)
         sessionID = UUID()
         isActive = false
         participants = []
@@ -92,15 +117,56 @@ final class RoomSession: ObservableObject {
         unread = 0
         chatOpen = false
         peopleOpen = false
+        notesOpen = false
         sharePickerOpen = false
         devicesOpen = false
         me = nil
         host = ""
+        finishNotes(host: hostNow, people: peopleNow)
         stickerArt = [:]
         artOrder = []
         artHolders = [:]
         artUploads.values.forEach { $0.cancel() }
         artUploads = [:]
+        pointers.clear()
+        pointerFlush?.cancel(); pointerFlush = nil
+        pendingPointer = nil; pointerSentAt = nil
+    }
+
+    /// My pointer over `sharer`'s screen, 0…1 from its top-left; nil when I move off it.
+    /// At most ~30 packets a second, and the last position always goes out.
+    func point(at location: CGPoint?, on sharer: String) {
+        guard isActive else { return }
+        pendingPointer = PointerMessage(on: sharer, at: location)
+        let now = ContinuousClock.now
+        if let sent = pointerSentAt, now - sent < Self.pointerInterval {
+            guard pointerFlush == nil else { return }
+            let wait = Self.pointerInterval - (now - sent)
+            pointerFlush = Task { [weak self] in
+                try? await Task.sleep(for: wait)
+                guard !Task.isCancelled, let self else { return }
+                self.pointerFlush = nil
+                self.flushPointer()
+            }
+            return
+        }
+        flushPointer()
+    }
+
+    /// A click on their screen: a ripple everyone watching sees.
+    func ping(at location: CGPoint, on sharer: String) {
+        guard isActive, isLive else { return }
+        let data = PointerMessage(on: sharer, at: location, ping: true).wire
+        Task { [media] in try? await media.send(data, topic: PointerMessage.topic) }
+    }
+
+    private func flushPointer() {
+        guard let message = pendingPointer else { return }
+        pendingPointer = nil
+        pointerSentAt = .now
+        guard isLive else { return }
+        let data = message.wire
+        Task { [media] in try? await media.sendLossy(data, topic: PointerMessage.topic) }
     }
 
     func send(_ text: String) async -> Bool {
@@ -167,6 +233,12 @@ final class RoomSession: ObservableObject {
               let from, !from.isEmpty, from != me?.handle, from != me?.id else { return }
         let sender = participants.first { $0.id == from }?.profile
             ?? Profile(id: from, handle: from, displayName: from, avatarURL: nil)
+        if topic == PointerMessage.topic {
+            if let message = PointerMessage(wire: data) {
+                pointers.update(from: from, name: sender.displayName.split(separator: " ").first.map(String.init) ?? from, message)
+            }
+            return
+        }
         switch topic {
         case "chat":
             guard let text = String(data: data, encoding: .utf8),
@@ -203,12 +275,109 @@ final class RoomSession: ObservableObject {
     // One side panel at a time.
     func toggleChat() {
         chatOpen.toggle()
-        if chatOpen { unread = 0; peopleOpen = false }
+        if chatOpen { unread = 0; peopleOpen = false; notesOpen = false }
     }
 
     func togglePeople() {
         peopleOpen.toggle()
-        if peopleOpen { chatOpen = false }
+        if peopleOpen { chatOpen = false; notesOpen = false }
+    }
+
+    func toggleNotes() {
+        notesOpen = true
+        chatOpen = false
+        peopleOpen = false
+        if notesOn { finishNotes(host: host, people: participants.map(\.profile.displayName)) }
+        else { startNotes() }
+    }
+
+    private func startNotes() {
+        guard isActive else { return }
+        notesOn = true
+        notesLines = []
+        notesResult = nil
+        notesWriting = false
+        attachTaps()
+    }
+
+    private func finishNotes(host: String, people: [String]) {
+        let leftover = detachTaps()
+        guard notesOn || !leftover.isEmpty else { return }
+        let existing = notesLines
+        notesOn = false
+        notesWriting = true
+        notesJob?.cancel()
+        notesJob = Task { [weak self] in
+            guard let self else { return }
+            var lines = existing
+            if let transcribe = self.onTranscribe {
+                for (speaker, wav) in leftover {
+                    if let line = try? await transcribe(wav, speaker), !line.isEmpty { lines.append(line) }
+                }
+            }
+            self.notesLines = lines
+            do {
+                if let write = self.onWriteNotes {
+                    let notes = try await write(host, people, lines.joined(separator: "\n"))
+                    self.notesResult = notes
+                    self.problem = nil
+                }
+            } catch {
+                self.problem = "Couldn’t write the notes. They’re still here if you try again."
+            }
+            self.notesWriting = false
+        }
+    }
+
+    private func attachTaps() {
+        guard notesOn, let me else { return }
+        let sources = media.audioSources(localID: me.handle)
+        let present = Set(sources.map(\.id))
+        for (id, tap) in taps where !present.contains(id) {
+            tap.onChunk = nil
+            taps[id] = nil
+        }
+        for source in sources where taps[source.id] == nil {
+            let tap = SpeakerTap(speaker: speakerName(source.id))
+            tap.onChunk = { [weak self] wav in
+                Task { @MainActor in
+                    guard let self, self.notesOn else { return }
+                    await self.addLine(wav, speaker: tap.speaker, ticket: self.sessionID)
+                }
+            }
+            source.track.add(audioRenderer: tap)
+            taps[source.id] = tap
+        }
+    }
+
+    private func detachTaps() -> [(String, Data)] {
+        var leftover: [(String, Data)] = []
+        for (id, tap) in taps {
+            if let wav = tap.flush() { leftover.append((tap.speaker, wav)) }
+            if let track = media.audioSources(localID: me?.handle ?? id).first(where: { $0.id == id })?.track {
+                track.remove(audioRenderer: tap)
+            }
+            tap.onChunk = nil
+        }
+        taps = [:]
+        return leftover
+    }
+
+    private func addLine(_ wav: Data, speaker: String, ticket: UUID) async {
+        guard let onTranscribe else { return }
+        do {
+            let line = try await onTranscribe(wav, speaker)
+            guard ticket == sessionID, !line.isEmpty else { return }
+            notesLines.append(line)
+            if notesLines.count > 400 { notesLines.removeFirst(notesLines.count - 400) }
+        } catch {
+            if ticket == sessionID { problem = "Couldn’t transcribe that moment. Still listening." }
+        }
+    }
+
+    private func speakerName(_ id: String) -> String {
+        if id == me?.handle { return me?.displayName ?? "You" }
+        return participants.first { $0.id == id }?.profile.displayName ?? id
     }
 
     // MARK: -
@@ -220,6 +389,7 @@ final class RoomSession: ObservableObject {
         if artHolders.values.contains(where: { !$0.isSubset(of: present) }) {
             artHolders = artHolders.mapValues { $0.intersection(present) }
         }
+        for gone in pointers.marks.keys where !present.contains(gone) { pointers.forget(gone) }
         var list = [RoomParticipant(id: me.id, profile: me, isLocal: true, isHost: me.handle == host,
                                     micOn: micOn, camOn: camOn, video: media.localVideo)]
         if media.isConnected {

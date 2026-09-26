@@ -32,9 +32,9 @@ import Testing
             let visit = try await a.visit(bp.id, visitID: visitID)
             let grant = try #require(visit.grant)
             try await guest.connect(grant, microphone: false, camera: false)
-            try await a.announceVisit(bp.id, visitID: visitID)
+            try await a.announceVisit(bp.id, visitID: visitID, still: nil)
             for _ in 0..<100 { if !atB.isEmpty { break }; try await Task.sleep(for: .milliseconds(30)) }
-            guard case .knock(let from, let receivedID) = try #require(atB.first) else { Issue.record("No knock"); throw BackendError.noProfile }
+            guard case .knock(let from, let receivedID, _) = try #require(atB.first) else { Issue.record("No knock"); throw BackendError.noProfile }
             #expect(from.id == ap.id && receivedID == visitID)
             let preview = try #require(try await b.answer(hidden: true, visitID: visitID))
             try await peek.connect(preview, microphone: false, camera: false)
@@ -61,7 +61,7 @@ import Testing
             let canceledID = UUID()
             let secondVisit = try await a.visit(bp.id, visitID: canceledID)
             try await guest.connect(try #require(secondVisit.grant), microphone: false, camera: false)
-            try await a.announceVisit(bp.id, visitID: canceledID)
+            try await a.announceVisit(bp.id, visitID: canceledID, still: nil)
             await a.leaveVisit(bp.id, visitID: canceledID)
             func receivedLeft() -> Bool {
                 atB.contains { event in
@@ -122,9 +122,9 @@ import Testing
             let visitID = UUID(), visit = try await guest.visit(hp.id, visitID: visitID)
             #expect(visit.mode == .walkIn)
             try await outside.connect(try #require(visit.grant), microphone: false, camera: false)
-            try await guest.announceVisit(hp.id, visitID: visitID)
+            try await guest.announceVisit(hp.id, visitID: visitID, still: nil)
             for _ in 0..<100 { if !arrivals.isEmpty { break }; try await Task.sleep(for: .milliseconds(30)) }
-            guard case .walkIn(let who, let receivedID) = try #require(arrivals.first) else {
+            guard case .walkIn(let who, let receivedID, _) = try #require(arrivals.first) else {
                 Issue.record("Open door did not receive friend walk-in"); throw BackendError.noProfile
             }
             #expect(who.id == gp.id && receivedID == visitID)

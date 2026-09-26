@@ -36,6 +36,8 @@ class MediaSession: ObservableObject {
     @Published var micOn = false
     @Published var camOn = false
     @Published var sharing = false
+    /// What I'm sharing, so friends' pointers can be drawn over the real thing.
+    @Published private(set) var sharedSource: ShareSource?
     @Published var problem: String?
     @Published var isUpdating = false
     var isConnected: Bool { phase == .connected }
@@ -46,7 +48,13 @@ class MediaSession: ObservableObject {
     /// A finished byte stream: bytes, topic, attributes, sender identity.
     var onBytes: ((Data, String, [String: String], String?) -> Void)?
 
+    /// 1080p30. LiveKit's own default is 720p; the encode cap follows the captured size.
+    private static func cameraOptions(device: AVCaptureDevice? = nil) -> CameraCaptureOptions {
+        CameraCaptureOptions(device: device, dimensions: .h1080_169, fps: 30)
+    }
+
     private let room = Room(roomOptions: RoomOptions(
+        defaultCameraCaptureOptions: MediaSession.cameraOptions(),
         defaultAudioCaptureOptions: AudioCaptureOptions(
             echoCancellation: true, autoGainControl: true, noiseSuppression: true, highpassFilter: true
         )
@@ -54,6 +62,12 @@ class MediaSession: ObservableObject {
     private var inflight: Task<Void, Error>?
     private let generation = OperationGeneration()
     private let microphoneIntent = OperationGeneration()
+    /// A camera started before the seat exists: I see myself at once, and the knock
+    /// publishes a camera whose exposure has already settled. The next connect owns it.
+    private var warmCamera: LocalVideoTrack?
+    private var warming: Task<LocalVideoTrack?, Never>?
+    private let cameraWarmth = OperationGeneration()
+    var isCameraWarm: Bool { warming != nil || warmCamera != nil }
     private var wantsConnection = false
     private var screenPublication: LocalTrackPublication?
     private var updateCount = 0
@@ -120,20 +134,15 @@ class MediaSession: ObservableObject {
                 try generation.check(ticket)
                 try await room.connect(url: grant.url, token: grant.token)
                 try generation.check(ticket)
-                if microphone {
-                    do { try await changeMicrophone(true, intent: micTicket, allowWhileConnecting: true) }
-                    catch is CancellationError { /* A newer mute or connection state wins. */ }
-                    catch { problem = microphoneFailureMessage(error) }
-                    try generation.check(ticket)
-                }
-                if camera {
-                    do { _ = try await room.localParticipant.setCamera(enabled: true) }
-                    catch { if problem == nil { problem = "Camera unavailable. You can keep talking without video." } }
-                    try generation.check(ticket)
-                }
+                // Voice and picture start together, not one after the other.
+                async let heard: Void = startMicrophone(microphone, intent: micTicket)
+                async let seen: Void = startCamera(camera)
+                _ = await (heard, seen)
+                try generation.check(ticket)
                 phase = .connected
                 refresh()
             } catch {
+                await coolCamera()
                 await room.disconnect()
                 if generation.isCurrent(ticket) {
                     wantsConnection = false
@@ -153,9 +162,78 @@ class MediaSession: ObservableObject {
         fadePlayback(to: 0, duration: 0)
         phase = .idle
         clearTracks()
+        await coolCamera()
         _ = try? await enqueue { [self] in
             await room.disconnect()
             screenPublication = nil
+        }
+    }
+
+    /// Start the camera now, ahead of a seat. Leaving before connecting stops it.
+    func warmUpCamera() {
+        guard warming == nil, warmCamera == nil, !isConnected else { return }
+        let ticket = cameraWarmth.current
+        warming = Task { [weak self] in
+            let track = await LocalVideoTrack.createCameraTrack(options: Self.cameraOptions())
+            let started = (try? await track.start()) != nil
+            guard started, let self, self.cameraWarmth.isCurrent(ticket) else {
+                if started { try? await track.stop() }
+                return nil
+            }
+            self.warmCamera = track
+            if !self.camOn { self.localVideo = track }
+            return track
+        }
+    }
+
+    /// One small JPEG of my camera as it is now, for the knock. Nil when no clear frame
+    /// arrives in time: the knock never waits long for its picture.
+    func cameraStill(within timeout: Duration = .milliseconds(350)) async -> Data? {
+        guard let track = localVideo as? LocalVideoTrack else { return nil }
+        let grabber = StillGrabber()
+        track.add(videoRenderer: grabber)
+        defer { track.remove(videoRenderer: grabber) }
+        return await grabber.next(within: timeout)
+    }
+
+    private func startMicrophone(_ on: Bool, intent: UInt64) async {
+        guard on else { return }
+        do { try await changeMicrophone(true, intent: intent, allowWhileConnecting: true) }
+        catch is CancellationError { /* A newer mute or connection state wins. */ }
+        catch { problem = microphoneFailureMessage(error) }
+    }
+
+    private func startCamera(_ on: Bool) async {
+        let warm = await takeWarmCamera()
+        guard on else {
+            if let warm { try? await warm.stop() }
+            return
+        }
+        do {
+            if let warm { _ = try await room.localParticipant.publish(videoTrack: warm) }
+            else { _ = try await room.localParticipant.setCamera(enabled: true) }
+        } catch {
+            if let warm { try? await warm.stop() }
+            if problem == nil { problem = "Camera unavailable. You can keep talking without video." }
+        }
+    }
+
+    private func takeWarmCamera() async -> LocalVideoTrack? {
+        _ = await warming?.value
+        warming = nil
+        defer { warmCamera = nil }
+        return warmCamera
+    }
+
+    private func coolCamera() async {
+        cameraWarmth.advance()
+        let pending = warming
+        warming = nil
+        _ = await pending?.value
+        if let track = warmCamera {
+            warmCamera = nil
+            if localVideo === track { localVideo = nil }
+            try? await track.stop()
         }
     }
 
@@ -181,7 +259,7 @@ class MediaSession: ObservableObject {
             guard let capturer = (room.localParticipant.firstCameraVideoTrack as? LocalVideoTrack)?.capturer as? CameraCapturer else {
                 throw MediaFailure.unavailable
             }
-            _ = try await capturer.set(options: CameraCaptureOptions(device: device))
+            _ = try await capturer.set(options: Self.cameraOptions(device: device))
         }
     }
 
@@ -199,17 +277,21 @@ class MediaSession: ObservableObject {
         }
     }
 
-    func startScreenShare(_ source: ShareSource) async {
+    /// `withSound`: the shared apps' audio rides out on my microphone track (LiveKit mixes
+    /// it there on macOS), so muting my mic mutes it too. Doorbell's own audio is never
+    /// captured. Sound usually means a video, so it also gets 30 fps.
+    func startScreenShare(_ source: ShareSource, withSound: Bool = false) async {
         await update("Couldn’t share that window. Check Screen Recording permission, then try again.") { [self] in
             if let screenPublication { try await room.localParticipant.unpublish(publication: screenPublication) }
             // LiveKit's source descriptors contain immutable ScreenCaptureKit metadata.
             // Its async factory transfers the descriptor to the RTC executor.
             nonisolated(unsafe) let captureSource = source.source
             let track = await LocalVideoTrack.createMacOSScreenShareTrack(source: captureSource,
-                options: ScreenShareCaptureOptions(fps: 15, appAudio: false))
+                options: ScreenShareCaptureOptions(fps: withSound ? 30 : 15, appAudio: withSound))
             track.capturer.delegates.add(delegate: self)
             do { screenPublication = try await room.localParticipant.publish(videoTrack: track) }
             catch { try? await track.stop(); throw error }
+            sharedSource = source
         }
     }
     func stopScreenShare() async {
@@ -217,11 +299,18 @@ class MediaSession: ObservableObject {
             if let publication = screenPublication { try await room.localParticipant.unpublish(publication: publication) }
             else { _ = try await room.localParticipant.setScreenShare(enabled: false) }
             screenPublication = nil
+            sharedSource = nil
         }
     }
     func send(_ data: Data, topic: String) async throws {
         guard isConnected, data.count <= 4_000 else { throw MediaFailure.unavailable }
         try await room.localParticipant.publish(data: data, options: DataPublishOptions(topic: topic, reliable: true))
+    }
+
+    /// For many small, replaceable updates (a moving pointer): a lost one doesn't matter.
+    func sendLossy(_ data: Data, topic: String) async throws {
+        guard isConnected, data.count <= 1_000 else { throw MediaFailure.unavailable }
+        try await room.localParticipant.publish(data: data, options: DataPublishOptions(topic: topic, reliable: false))
     }
 
     /// Larger payloads, to chosen people only. The SDK chunks them.
@@ -342,12 +431,12 @@ class MediaSession: ObservableObject {
 
     private func clearTracks() {
         peers = []; localVideo = nil; localScreen = nil
-        micOn = false; camOn = false; sharing = false
+        micOn = false; camOn = false; sharing = false; sharedSource = nil
     }
     private func refresh() {
         guard wantsConnection else { return }
         let local = room.localParticipant
-        localVideo = local.firstCameraVideoTrack
+        localVideo = local.firstCameraVideoTrack ?? warmCamera
         let screen = local.firstScreenShareVideoTrack as? LocalVideoTrack
         localScreen = screen?.capturer.captureState == .started ? screen : nil
         micOn = local.isMicrophoneEnabled()
@@ -356,6 +445,22 @@ class MediaSession: ObservableObject {
         peers = room.remoteParticipants.values.map(Self.peer).sorted { $0.id < $1.id }
         applyVolume(playbackGain)
     }
+    /// LiveKit audio, one track per person, for notes.
+    func audioSources(localID: String) -> [(id: String, track: AudioTrack)] {
+        var sources: [(id: String, track: AudioTrack)] = []
+        for publication in room.localParticipant.audioTracks {
+            if let track = publication.track as? AudioTrack { sources.append((localID, track)); break }
+        }
+        for participant in room.remoteParticipants.values {
+            let id = participant.identity?.stringValue ?? ""
+            guard !id.isEmpty else { continue }
+            for publication in participant.audioTracks {
+                if let track = publication.track as? AudioTrack { sources.append((id, track)); break }
+            }
+        }
+        return sources
+    }
+
     private func applyVolume(_ gain: Double) {
         for participant in room.remoteParticipants.values {
             for pub in participant.audioTracks { (pub.track as? RemoteAudioTrack)?.volume = gain * volumeScale }

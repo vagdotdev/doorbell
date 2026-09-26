@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import DoorbellApp
@@ -26,7 +27,9 @@ actor TestBackend: DoorbellBackend {
     var waiter: CheckedContinuation<Void, Never>?
     var admitted: [(String, UUID, String?)] = []
     var visibleAnswers = 0
+    var hiddenAnswers = 0
     var announced = 0
+    var lastStill: Data?
     var signedOut = false
     var failAdmission = false
     var ownProfile = owner
@@ -39,13 +42,21 @@ actor TestBackend: DoorbellBackend {
         (events, eventOut) = AsyncStream.makeStream()
     }
     func accountState() async -> AccountState { signedOut ? .signedOut : .ready }
+    var myStatus: DoorStatus?
+    var statusWrites: [String?] = []
     func hallway() async throws -> HallwaySnapshot {
         if holdNextHallway {
             holdNextHallway = false
             await withCheckedContinuation { hallwayWaiter = $0 }
         }
-        return .init(me: ownProfile, doors: [], requests: [], outgoing: [])
+        return .init(me: ownProfile, doors: [], requests: [], outgoing: [], myStatus: myStatus)
     }
+    func setStatus(_ text: String) async throws -> DoorStatus {
+        statusWrites.append(text)
+        myStatus = DoorStatus(text: text, expiresAt: Date() + DoorStatus.lifetime)
+        return myStatus!
+    }
+    func clearStatus() async throws { statusWrites.append(nil); myStatus = nil }
     func holdHallway() { holdNextHallway = true }
     func releaseHallway() { hallwayWaiter?.resume(); hallwayWaiter = nil }
     var hallwayPending: Bool { hallwayWaiter != nil }
@@ -69,7 +80,7 @@ actor TestBackend: DoorbellBackend {
         if heldVisit { await withCheckedContinuation { waiter = $0 } }
         return Visit(mode: .knock, grant: grant)
     }
-    func announceVisit(_ id: String, visitID: UUID) async throws { announced += 1 }
+    func announceVisit(_ id: String, visitID: UUID, still: Data?) async throws { announced += 1; lastStill = still }
     func holdLeave() { heldLeave = true }
     func releaseLeave() { heldLeave = false; leaveWaiter?.resume(); leaveWaiter = nil }
     var leavePending: Bool { leaveWaiter != nil }
@@ -81,7 +92,7 @@ actor TestBackend: DoorbellBackend {
     var answerPending: Bool { answerWaiter != nil }
     func releaseAnswer() { answerWaiter?.resume(); answerWaiter = nil }
     func answer(hidden: Bool, visitID: UUID?) async throws -> MediaGrant? {
-        if !hidden { visibleAnswers += 1 }
+        if hidden { hiddenAnswers += 1 } else { visibleAnswers += 1 }
         if !hidden && heldAnswer { await withCheckedContinuation { answerWaiter = $0 } }
         return grant
     }
@@ -95,13 +106,18 @@ actor TestBackend: DoorbellBackend {
 
 @MainActor final class TestSeat: MediaSession {
     var connects: [(Bool, Bool)] = []
+    var grants: [MediaGrant] = []
     var disconnects = 0
     var failConnect = false
+    var warmed = 0
+    var still: Data?
+    override func warmUpCamera() { warmed += 1 }
+    override func cameraStill(within timeout: Duration = .milliseconds(350)) async -> Data? { still }
     var holdNextDisconnect = false
     var disconnectWaiter: CheckedContinuation<Void, Never>?
     override func connect(_ grant: MediaGrant, microphone: Bool, camera: Bool) async throws {
         if failConnect { throw URLError(.cannotConnectToHost) }
-        connects.append((microphone, camera)); phase = .connected
+        connects.append((microphone, camera)); grants.append(grant); phase = .connected
         micOn = microphone; camOn = camera
     }
     override func disconnect() async {
@@ -117,6 +133,14 @@ actor TestBackend: DoorbellBackend {
 }
 
 @MainActor private final class AvailabilityBox { var value = Quiet.Status.available }
+
+private func solid(_ level: CGFloat, side: Int = 192) -> CGImage {
+    let context = CGContext(data: nil, width: side, height: side * 9 / 16, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    context.setFillColor(CGColor(red: level, green: level * 0.9, blue: level * 0.8, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+    return context.makeImage()!
+}
 
 @MainActor private func eventually(_ predicate: () -> Bool) async -> Bool {
     for _ in 0..<200 { if predicate() { return true }; try? await Task.sleep(for: .milliseconds(5)) }
@@ -753,6 +777,46 @@ actor TestBackend: DoorbellBackend {
         media.releaseDisconnect()
         #expect(await eventually { !door.blocksAutomaticUpdate })
         await door.shutdown()
+    }
+
+    @Test func knockCarryingItsPreviewSeatConnectsWithoutAsking() async throws {
+        let (backend, _, door, _, peep) = await fixture()
+        let carried = MediaGrant(url: "ws://localhost:7880", token: "carried", room: "doorstep:owner:1")
+        let face = try #require(KnockStill.encode(solid(0.6)))
+        await backend.simulate(.knock(alice, visitID: UUID(), payload: KnockPayload(preview: carried, still: face)))
+        #expect(await eventually { peep.isConnected })
+        #expect(peep.grants.last == carried)
+        #expect(await backend.hiddenAnswers == 0)
+        #expect(door.visitorStill != nil)
+        await door.shutdown()
+    }
+
+    @Test func knockFromAnOlderServerStillAsksForItsPreviewSeat() async {
+        let (backend, _, door, _, peep) = await fixture()
+        await backend.simulate(.knock(alice, visitID: UUID()))
+        #expect(await eventually { peep.isConnected })
+        #expect(await backend.hiddenAnswers == 1)
+        #expect(peep.grants.last == grant && door.visitorStill == nil)
+        await door.shutdown()
+    }
+
+    @Test func visitingWarmsTheCameraAndKnocksWithAStill() async {
+        let (backend, _, door, media, _) = await fixture()
+        media.still = Data([0xFF, 0xD8, 0xFF, 0x01])
+        door.visit(Door(profile: alice, followsMe: true, isCloseFriend: false))
+        #expect(media.warmed == 1)
+        #expect(await eventually { media.isConnected })
+        for _ in 0..<200 { if await backend.announced == 1 { break }; try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(await backend.lastStill == media.still)
+        door.leaveVisit()
+        await door.shutdown()
+    }
+
+    @Test func darkFramesAreNotAFaceAndLitOnesFitTheKnock() throws {
+        #expect(KnockStill.encode(solid(0.02)) == nil)
+        let jpeg = try #require(KnockStill.encode(solid(0.6)))
+        #expect(jpeg.count <= KnockStill.maxBytes && jpeg.starts(with: [0xFF, 0xD8, 0xFF]))
+        #expect(jpeg.base64EncodedString().hasPrefix("/9j/"))
     }
 
     @Test func focusDuringPreviewReconnectDisconnectsCapture() async {

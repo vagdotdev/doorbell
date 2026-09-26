@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <meta name="robots" content="noindex, nofollow">
+  <title>doorbell admin</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    :root {
+      --background: #000000;
+      --foreground: #ededed;
+      --gray: #888888;
+      --gray-dark: #333333;
+      --gray-light: #666666;
+      --accents-1: #111111;
+      --green: #50e3a4;
+      --sf: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+      --sf-mono: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: dark; -webkit-font-smoothing: antialiased; }
+    body {
+      min-height: 100dvh;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--sf);
+      text-transform: lowercase;
+    }
+    main { width: 100%; max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    /* login */
+    .gate {
+      min-height: 80dvh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 28px;
+    }
+    .gate h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; }
+    .gate h1 .kind {
+      display: block; text-align: center;
+      font-family: "Times New Roman", Times, serif;
+      font-size: 10px; letter-spacing: 0.06em; font-weight: 400; color: var(--gray);
+    }
+    .gate form { display: flex; gap: 8px; width: min(360px, 90vw); }
+    .gate input {
+      flex: 1; min-width: 0;
+      padding: 12px 14px;
+      font-family: var(--sf-mono); font-size: 14px;
+      color: var(--foreground); background: var(--accents-1);
+      border: 1px solid var(--gray-dark); border-radius: 6px;
+      outline: none;
+    }
+    .gate input:focus { border-color: var(--gray-light); }
+    .gate button {
+      padding: 12px 18px;
+      font-family: var(--sf); font-size: 14px; text-transform: lowercase;
+      color: var(--background); background: var(--foreground);
+      border: none; border-radius: 6px; cursor: pointer;
+    }
+    .gate button:disabled { opacity: 0.5; cursor: default; }
+    .gate .error { min-height: 20px; font-size: 13px; color: #f36; }
+
+    /* dashboard */
+    .dash { display: none; }
+    .dash.visible { display: block; }
+    header {
+      display: flex; align-items: baseline; gap: 14px;
+      padding-bottom: 28px;
+    }
+    header h1 { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
+    header .updated { font-size: 12px; color: var(--gray-light); font-family: var(--sf-mono); }
+    header .spacer { flex: 1; }
+    header .signout {
+      font-size: 13px; color: var(--gray); background: none;
+      border: none; cursor: pointer; font-family: var(--sf); text-transform: lowercase;
+    }
+    header .signout:hover { color: var(--foreground); }
+
+    .tiles {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px; margin-bottom: 36px;
+    }
+    .tile {
+      border: 1px solid var(--gray-dark); border-radius: 10px;
+      padding: 16px 18px; background: var(--accents-1);
+    }
+    .tile .n { font-family: var(--sf-mono); font-size: 26px; font-weight: 500; }
+    .tile .n.live { color: var(--green); }
+    .tile .l { margin-top: 4px; font-size: 12px; color: var(--gray); }
+
+    section { margin-bottom: 40px; }
+    section > .label {
+      display: block; margin-bottom: 14px;
+      font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
+      color: var(--gray); text-transform: uppercase;
+    }
+    .empty { font-size: 13px; color: var(--gray-light); }
+
+    .chart { display: flex; align-items: flex-end; gap: 3px; height: 72px; }
+    .chart .bar {
+      flex: 1; min-width: 4px; border-radius: 2px 2px 0 0;
+      background: var(--gray-dark); position: relative;
+    }
+    .chart .bar.has { background: var(--foreground); }
+    .chart-days {
+      display: flex; justify-content: space-between;
+      margin-top: 6px; font-family: var(--sf-mono); font-size: 10px; color: var(--gray-light);
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: right; font-weight: 400; color: var(--gray-light);
+      padding: 0 10px 8px; border-bottom: 1px solid var(--gray-dark);
+      font-size: 11px;
+    }
+    th:first-child { text-align: left; padding-left: 0; }
+    td {
+      text-align: right; padding: 10px; border-bottom: 1px solid #1a1a1a;
+      font-family: var(--sf-mono); font-size: 12px; white-space: nowrap;
+    }
+    td:first-child { text-align: left; padding-left: 0; font-family: var(--sf); font-size: 13px; }
+    td .handle { color: var(--gray); font-family: var(--sf-mono); font-size: 11px; margin-left: 6px; }
+
+    .pairs { display: flex; flex-direction: column; gap: 10px; }
+    .pair { display: grid; grid-template-columns: minmax(140px, 220px) 1fr auto; align-items: center; gap: 12px; }
+    .pair .who { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pair .who .arrow { color: var(--gray-light); margin: 0 4px; }
+    .pair .track { height: 8px; border-radius: 4px; background: var(--accents-1); overflow: hidden; }
+    .pair .fill { height: 100%; border-radius: 4px; background: var(--foreground); }
+    .pair .meta { font-family: var(--sf-mono); font-size: 11px; color: var(--gray); white-space: nowrap; }
+
+    .recent { display: flex; flex-direction: column; }
+    .row {
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 9px 0; border-bottom: 1px solid #1a1a1a; font-size: 13px;
+    }
+    .row .kind { font-family: var(--sf-mono); font-size: 11px; color: var(--gray); width: 52px; flex-shrink: 0; }
+    .row .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .what .dim { color: var(--gray-light); }
+    .row .dur { font-family: var(--sf-mono); font-size: 11px; color: var(--gray); white-space: nowrap; }
+    .row .dur.live { color: var(--green); }
+    .row .when { font-family: var(--sf-mono); font-size: 11px; color: var(--gray-light); white-space: nowrap; }
+
+    footer { padding-top: 40px; text-align: center; font-size: 13px; color: var(--gray); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="gate" id="gate">
+      <h1>doorbell<span class="kind">admin</span></h1>
+      <form id="login-form">
+        <input id="password" type="password" placeholder="password" autocomplete="current-password" autofocus>
+        <button id="login-btn" type="submit">enter</button>
+      </form>
+      <div class="error" id="login-error"></div>
+    </div>
+
+    <div class="dash" id="dash">
+      <header>
+        <h1>doorbell admin</h1>
+        <span class="updated" id="updated"></span>
+        <span class="spacer"></span>
+        <button class="signout" id="signout">sign out</button>
+      </header>
+
+      <div class="tiles">
+        <div class="tile"><div class="n" id="t-people">–</div><div class="l">people</div></div>
+        <div class="tile"><div class="n" id="t-calls">–</div><div class="l">calls</div></div>
+        <div class="tile"><div class="n" id="t-minutes">–</div><div class="l">minutes called</div></div>
+        <div class="tile"><div class="n" id="t-knocks">–</div><div class="l">knocks</div></div>
+        <div class="tile"><div class="n live" id="t-now">–</div><div class="l">in a call now</div></div>
+      </div>
+
+      <section>
+        <span class="label">new doors — last 30 days</span>
+        <div class="chart" id="chart"></div>
+        <div class="chart-days" id="chart-days"></div>
+      </section>
+
+      <section>
+        <span class="label">people</span>
+        <div id="people"></div>
+      </section>
+
+      <section>
+        <span class="label">who calls who</span>
+        <div id="pairs"></div>
+      </section>
+
+      <section>
+        <span class="label">recent activity</span>
+        <div id="recent"></div>
+      </section>
+
+      <footer>made by vagdev ;)</footer>
+    </div>
+  </main>
+
+  <script>
+    const CONVEX_URL = "https://fastidious-starling-768.convex.cloud";
+    const TOKEN_KEY = "doorbell-admin-token";
+    const REFRESH_MS = 30_000;
+
+    const $ = (id) => document.getElementById(id);
+    let refreshTimer = null;
+
+    async function convex(kind, path, args) {
+      const res = await fetch(`${CONVEX_URL}/api/${kind}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, args, format: "json" }),
+      });
+      const data = await res.json();
+      if (data.status !== "success") {
+        throw new Error(typeof data.errorData === "string" ? data.errorData
+          : (data.errorMessage || "something went wrong"));
+      }
+      return data.value;
+    }
+
+    function showGate(message) {
+      clearInterval(refreshTimer);
+      sessionStorage.removeItem(TOKEN_KEY);
+      $("dash").classList.remove("visible");
+      $("gate").style.display = "flex";
+      $("login-error").textContent = message || "";
+      $("password").focus();
+    }
+
+    function showDash() {
+      $("gate").style.display = "none";
+      $("dash").classList.add("visible");
+    }
+
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const fmtMin = (m) => m >= 100 ? String(Math.round(m)) : String(m);
+    function ago(t, now) {
+      const s = Math.max(0, Math.round((now - t) / 1000));
+      if (s < 60) return `${s}s ago`;
+      if (s < 3600) return `${Math.round(s / 60)}m ago`;
+      if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+      return `${Math.round(s / 86400)}d ago`;
+    }
+
+    function render(stats, now) {
+      $("t-people").textContent = stats.totals.people;
+      $("t-calls").textContent = stats.totals.calls;
+      $("t-minutes").textContent = fmtMin(stats.totals.minutes);
+      $("t-knocks").textContent = stats.totals.knocks;
+      $("t-now").textContent = stats.totals.inCallNow;
+
+      const max = Math.max(1, ...stats.signupsByDay.map((d) => d.count));
+      $("chart").innerHTML = stats.signupsByDay.map((d) => {
+        const h = d.count === 0 ? 2 : Math.max(6, Math.round((d.count / max) * 72));
+        return `<div class="bar${d.count ? " has" : ""}" style="height:${h}px" title="${esc(d.day)}: ${d.count}"></div>`;
+      }).join("");
+      const days = stats.signupsByDay;
+      $("chart-days").innerHTML =
+        `<span>${esc(days[0].day.slice(5))}</span><span>${esc(days[days.length - 1].day.slice(5))}</span>`;
+
+      $("people").innerHTML = stats.people.length === 0
+        ? `<div class="empty">nobody yet.</div>`
+        : `<table><thead><tr>
+            <th>person</th><th>calls</th><th>minutes</th><th>knocks out</th><th>knocks in</th><th>last active</th><th>joined</th>
+          </tr></thead><tbody>` +
+          stats.people.map((p) => `<tr>
+            <td>${esc(p.displayName)}<span class="handle">@${esc(p.handle)}</span></td>
+            <td>${p.calls}</td><td>${fmtMin(p.minutes)}</td>
+            <td>${p.knocksOut}</td><td>${p.knocksIn}</td>
+            <td>${p.lastActive === null ? "–" : esc(ago(p.lastActive, now))}</td>
+            <td>${esc(ago(p.joinedAt, now))}</td>
+          </tr>`).join("") + `</tbody></table>`;
+
+      const maxPair = Math.max(1, ...stats.pairs.map((p) => p.calls));
+      $("pairs").innerHTML = stats.pairs.length === 0
+        ? `<div class="empty">no calls recorded yet — analytics start once the livekit webhook is connected.</div>`
+        : `<div class="pairs">` + stats.pairs.map((p) => `<div class="pair">
+            <span class="who">@${esc(p.guest)}<span class="arrow">→</span>@${esc(p.owner)}</span>
+            <span class="track"><span class="fill" style="width:${Math.round((p.calls / maxPair) * 100)}%"></span></span>
+            <span class="meta">${p.calls} call${p.calls === 1 ? "" : "s"} · ${fmtMin(p.minutes)} min</span>
+          </div>`).join("") + `</div>`;
+
+      $("recent").innerHTML = stats.recent.length === 0
+        ? `<div class="empty">nothing yet.</div>`
+        : `<div class="recent">` + stats.recent.map((s) => {
+            const live = s.leftAt === null;
+            const dur = live ? "live" : `${fmtMin(Math.round(Math.max(0, s.leftAt - s.joinedAt) / 6000) / 10)} min`;
+            const what = s.kind === "door"
+              ? `@${esc(s.identity)} <span class="dim">in a call at</span> @${esc(s.ownerHandle)}'s`
+              : s.preview
+                ? `@${esc(s.identity)} <span class="dim">peeked at the doorstep</span>`
+                : s.identity === s.ownerHandle
+                  ? `@${esc(s.identity)} <span class="dim">at their own doorstep</span>`
+                  : `@${esc(s.identity)} <span class="dim">knocked on</span> @${esc(s.ownerHandle)}'s <span class="dim">door</span>`;
+            return `<div class="row">
+              <span class="kind">${s.kind === "door" ? "call" : "knock"}</span>
+              <span class="what">${what}</span>
+              <span class="dur${live ? " live" : ""}">${dur}</span>
+              <span class="when">${esc(ago(s.joinedAt, now))}</span>
+            </div>`;
+          }).join("") + `</div>`;
+
+      $("updated").textContent = `updated ${new Date(now).toLocaleTimeString()}`;
+    }
+
+    async function load() {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (!token) { showGate(); return; }
+      const now = Date.now();
+      try {
+        const stats = await convex("query", "admin:stats", { token, now });
+        showDash();
+        render(stats, now);
+      } catch (err) {
+        if (/sign in/i.test(err.message)) showGate("session expired — sign in again.");
+        else $("updated").textContent = `offline — ${err.message}`;
+      }
+    }
+
+    $("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const password = $("password").value;
+      if (!password) return;
+      $("login-btn").disabled = true;
+      $("login-error").textContent = "";
+      try {
+        const { token } = await convex("action", "admin:login", { password });
+        sessionStorage.setItem(TOKEN_KEY, token);
+        $("password").value = "";
+        await load();
+        clearInterval(refreshTimer);
+        refreshTimer = setInterval(load, REFRESH_MS);
+      } catch (err) {
+        $("login-error").textContent = err.message.toLowerCase();
+      } finally {
+        $("login-btn").disabled = false;
+      }
+    });
+
+    $("signout").addEventListener("click", async () => {
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (token) convex("mutation", "admin:logout", { token }).catch(() => {});
+      showGate();
+    });
+
+    if (sessionStorage.getItem(TOKEN_KEY)) {
+      load();
+      refreshTimer = setInterval(load, REFRESH_MS);
+    }
+  </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { closeFriendEdge, followEdge, follows, profileValidator, publicProfile, requireProfile } from "./lib";
+import { statusOf, statusValidator } from "./status";
 
 /// Everything the hallway shows: doors I can knock on, requests to me, and who I'm
 /// waiting on. Reactive — the app subscribes and the list updates by itself.
@@ -12,8 +13,10 @@ export const hallway = query({
     v.null(),
     v.object({
       me: profileValidator,
+      myStatus: v.union(statusValidator, v.null()),
       doors: v.array(
-        v.object({ profile: profileValidator, followsMe: v.boolean(), isCloseFriend: v.boolean() }),
+        v.object({ profile: profileValidator, followsMe: v.boolean(), isCloseFriend: v.boolean(),
+          status: v.union(statusValidator, v.null()) }),
       ),
       requests: v.array(profileValidator),
       outgoing: v.array(v.id("profiles")),
@@ -48,6 +51,7 @@ export const hallway = query({
         profile: await publicProfile(ctx, p),
         followsMe: followsMe.has(p._id),
         isCloseFriend: closeSet.has(p._id),
+        status: await statusOf(ctx, p._id),
       });
     }
     const requests = [];
@@ -57,7 +61,7 @@ export const hallway = query({
       if (p !== null) requests.push(await publicProfile(ctx, p));
     }
     const outgoing = following.filter((f) => f.status === "pending").map((f) => f.followeeId);
-    return { me: await publicProfile(ctx, me), doors, requests, outgoing };
+    return { me: await publicProfile(ctx, me), myStatus: await statusOf(ctx, me._id), doors, requests, outgoing };
   },
 });
 

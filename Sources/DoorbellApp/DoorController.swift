@@ -9,9 +9,14 @@ final class DoorController: ObservableObject {
         let id: UUID
         let profile: Profile
         let walksIn: Bool
+        var payload: KnockPayload?
+        var still: NSImage?
+        var arrivedAt = ContinuousClock.now
     }
     @Published private(set) var arrivals: [Arrival] = []
     var visitor: Profile? { arrivals.first?.profile }
+    /// Their face as they knocked, until live video arrives.
+    var visitorStill: NSImage? { arrivals.first?.still }
     @Published private(set) var listening = false
     @Published private(set) var visiting: Door?
     @Published private(set) var visitMode: VisitMode = .knock
@@ -73,6 +78,7 @@ final class DoorController: ObservableObject {
     private var shuttingDown = false
     private var isLeaving = false
     private var pendingPreviewDepartures = 0
+    private var framed: Set<UUID> = []
 
     var blocksAutomaticUpdate: Bool {
         room.isActive || visiting != nil || isAdmitting || visitor != nil || isLeaving || shuttingDown
@@ -100,6 +106,10 @@ final class DoorController: ObservableObject {
         quiet = restoredQuietUntil != nil
         room = RoomSession(media: media)
         room.onLeave = { [weak self] in self?.requestLeaveRoom() }
+        room.onTranscribe = { [backend] wav, speaker in try await backend.transcribeSpeech(wav: wav, speaker: speaker) }
+        room.onWriteNotes = { [backend] host, people, transcript in
+            try await backend.writeMeetingNotes(host: host, people: people, transcript: transcript)
+        }
         hallway.beforeSignOut = { [weak self] in await self?.shutdown() }
         accountSink = hallway.$account.dropFirst().removeDuplicates().sink { [weak self] account in
             if account == .signedOut { Task { await self?.shutdown() } }
@@ -128,7 +138,7 @@ final class DoorController: ObservableObject {
     deinit { availabilityTask?.cancel(); eventTask?.cancel() }
 
     func refreshAvailability() {
-        let status = availabilityProbe?() ?? Quiet.status(ignoringOwnCamera: media.camOn || peep.camOn)
+        let status = availabilityProbe?() ?? Quiet.status(ignoringOwnCamera: media.camOn || media.isCameraWarm || peep.camOn)
         let previous = automaticQuiet
         let previousMicAccess = microphoneAccessNeeded
         automaticQuiet = status.suppressesAmbient
@@ -239,6 +249,8 @@ final class DoorController: ObservableObject {
         refreshDoorAudio()
         let mutedPreview = previewMicTask
         state.mode = .visiting(door)
+        media.warmUpCamera()
+        let clicked = ContinuousClock.now
         visitTimeout = Task { [weak self] in
             try? await Task.sleep(for: self?.timeout ?? .seconds(30))
             guard !Task.isCancelled else { return }
@@ -253,12 +265,19 @@ final class DoorController: ObservableObject {
                 try generation.check(ticket)
                 self.visitMode = visit.mode
                 if let grant = visit.grant {
+                    let seated = ContinuousClock.now
                     try await media.connect(grant, microphone: true, camera: true)
                     try generation.check(ticket)
+                    let connected = ContinuousClock.now
                     media.fadePlayback(to: Double(DesignTokens.doorVolume), duration: DesignTokens.audioArrive)
-                    // Signal only after the guest really occupies the isolated doorstep.
-                    try await backend.announceVisit(door.id, visitID: id)
+                    let still = await media.cameraStill()
                     try generation.check(ticket)
+                    // Signal only after the guest really occupies the isolated doorstep.
+                    try await backend.announceVisit(door.id, visitID: id, still: still)
+                    try generation.check(ticket)
+                    NSLog("door-timing: knock on %@ · seat %ldms · connected %ldms · announced %ldms · still %@",
+                          door.profile.handle, ms(clicked, seated), ms(clicked, connected), ms(clicked, .now),
+                          still.map { "\($0.count) B" } ?? "none")
                 } else if visit.mode == .walkIn { // Development hallway only.
                     finishVisit()
                     openRoom(host: door.profile.handle, others: [door.profile])
@@ -441,6 +460,7 @@ final class DoorController: ObservableObject {
         }
         arrivalTimeouts.removeValue(forKey: id)?.cancel()
         arrivals.removeAll { $0.id == id }
+        framed.remove(id)
         if wasFirst {
             if isAdmitting, !admitted { admissionTask?.cancel() }
             arrivalTask?.cancel()
@@ -472,12 +492,18 @@ final class DoorController: ObservableObject {
             do {
                 await peep.disconnect()
                 try Task.checkCancellation()
-                let grant = try await backend.answer(hidden: true, visitID: arrival.id)
+                // Current servers put my preview seat inside the knock; older ones make me ask.
+                var grant = arrival.payload?.preview
+                if grant == nil { grant = try await backend.answer(hidden: true, visitID: arrival.id) }
                 try Task.checkCancellation()
                 guard arrivals.first?.id == arrival.id, !shuttingDown else { return }
+                let seated = ContinuousClock.now
                 // Connect silently first: permission/availability can change
                 // while the network is in flight. Only then consider capture.
                 if let grant { try await peep.connect(grant, microphone: false, camera: false) }
+                NSLog("door-timing: %@ at the door · seat %ldms (%@) · connected %ldms", arrival.profile.handle,
+                      ms(arrival.arrivedAt, seated), arrival.payload?.preview == nil ? "asked" : "carried",
+                      ms(arrival.arrivedAt, .now))
                 try Task.checkCancellation()
                 guard arrivals.first?.id == arrival.id else { return }
                 if handoff {
@@ -500,9 +526,16 @@ final class DoorController: ObservableObject {
         return isAdmitting
     }
 
-    private func enqueue(_ profile: Profile, id: UUID, walkIn: Bool) {
+    /// The glass is showing live video for the first time.
+    func peepholeShowedVideo() {
+        guard let arrival = arrivals.first, framed.insert(arrival.id).inserted else { return }
+        NSLog("door-timing: %@ first frame %ldms after the knock", arrival.profile.handle, ms(arrival.arrivedAt, .now))
+    }
+
+    private func enqueue(_ profile: Profile, id: UUID, walkIn: Bool, payload: KnockPayload?) {
         guard !shuttingDown, hallway.me != nil, !arrivals.contains(where: { $0.id == id }), arrivals.count < 5 else { return }
-        let arrival = Arrival(id: id, profile: profile, walksIn: walkIn)
+        let arrival = Arrival(id: id, profile: profile, walksIn: walkIn, payload: payload,
+                              still: payload?.still.flatMap(NSImage.init(data:)))
         arrivals.append(arrival)
         arrivalTimeouts[id] = Task { [weak self] in
             try? await Task.sleep(for: self?.timeout ?? .seconds(30))
@@ -523,12 +556,12 @@ final class DoorController: ObservableObject {
     }
     private func handle(_ event: DoorEvent) {
         switch event {
-        case .knock(let who, let id):
+        case .knock(let who, let id, let payload):
             hallway.noteKnock(from: who)
-            enqueue(who, id: id, walkIn: false)
-        case .walkIn(let who, let id):
+            enqueue(who, id: id, walkIn: false, payload: payload)
+        case .walkIn(let who, let id, let payload):
             hallway.noteWalkIn(from: who)
-            enqueue(who, id: id, walkIn: true)
+            enqueue(who, id: id, walkIn: true, payload: payload)
         case .visitorLeft(let who, let id):
             if arrivals.contains(where: { $0.id == id && $0.profile.id == who.id }) { removeArrival(id) }
         case .admitted(let who, let grant, let id): admitted(by: who, grant: grant, visitID: id)
@@ -584,6 +617,10 @@ final class DoorController: ObservableObject {
         shuttingDown = false
     }
     func simulate(_ event: DoorEvent) { Task { await backend.simulate(event) } }
+}
+
+private func ms(_ from: ContinuousClock.Instant, _ to: ContinuousClock.Instant) -> Int {
+    Int(((to - from) / .milliseconds(1)).rounded())
 }
 
 @MainActor

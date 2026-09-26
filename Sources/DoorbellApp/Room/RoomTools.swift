@@ -30,6 +30,7 @@ struct SharePicker: View {
     @State private var problem: String?
     @State private var loading = true
     @State private var starting = false
+    @AppStorage(SettingsKey.shareSound) private var withSound = true
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -38,6 +39,13 @@ struct SharePicker: View {
                 Button("Cancel") { dismiss() }.disabled(starting)
             }
             Text("Only the screen or window you choose.").font(.system(size: 12)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Share sound", isOn: $withSound).toggleStyle(.switch).controlSize(.small).tint(DesignTokens.utility)
+                Text(withSound ? "Friends hear what’s playing. It goes out with your mic, so muting your mic mutes it too."
+                               : "Friends see your screen without its sound.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }.disabled(starting)
             if loading { ProgressView().frame(maxWidth: .infinity, minHeight: 160) }
             else if let problem {
                 Text(problem).font(.system(size: 13))
@@ -52,7 +60,7 @@ struct SharePicker: View {
                             Button {
                                 starting = true
                                 Task {
-                                    await media.startScreenShare(source)
+                                    await media.startScreenShare(source, withSound: withSound)
                                     starting = false
                                     if media.sharing { dismiss() } else { problem = media.problem ?? "Couldn’t start sharing." }
                                 }

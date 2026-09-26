@@ -18,6 +18,9 @@ actor MockBackend: DoorbellBackend {
 
     private var graph: Graph
     private let storageKey = "mock.graph.v1"
+    /// In memory only: statuses are short-lived anyway. One friend has one, to show it.
+    private var myStatus: DoorStatus?
+    private var statuses = ["priya": DoorStatus(text: "library till 9 📚", expiresAt: Date() + DoorStatus.lifetime)]
 
     init() {
         (updates, continuation) = AsyncStream<Void>.makeStream()
@@ -83,11 +86,37 @@ actor MockBackend: DoorbellBackend {
             .map { p in
                 Door(profile: p,
                      followsMe: graph.followers[p.id] == .accepted,
-                     isCloseFriend: graph.closeFriends.contains(p.id))
+                     isCloseFriend: graph.closeFriends.contains(p.id),
+                     status: statuses[p.id])
             }
         let requests = graph.people.filter { graph.followers[$0.id] == .pending }
         let outgoing = Set(graph.following.filter { $0.value == .pending }.map(\.key))
-        return HallwaySnapshot(me: graph.me, doors: doors, requests: requests, outgoing: outgoing)
+        return HallwaySnapshot(me: graph.me, doors: doors, requests: requests, outgoing: outgoing, myStatus: myStatus)
+    }
+
+    func setStatus(_ text: String) async throws -> DoorStatus {
+        let status = DoorStatus(text: String(text.prefix(DoorStatus.maxLength)), expiresAt: Date() + DoorStatus.lifetime)
+        myStatus = status
+        continuation.yield()
+        return status
+    }
+
+    func clearStatus() async throws {
+        myStatus = nil
+        continuation.yield()
+    }
+
+    func transcribeSpeech(wav: Data, speaker: String) async throws -> String {
+        "\(speaker): telusa"
+    }
+
+    func writeMeetingNotes(host: String, people: [String], transcript: String) async throws -> MeetingNotes {
+        let names = people.joined(separator: ", ")
+        return MeetingNotes(
+            text: "With \(names)\n\n\(transcript) (do you know?)",
+            url: URL(string: "https://example.test/n?t=mock")!,
+            inboxURL: URL(string: "https://example.test/n/feed?t=mock")!
+        )
     }
 
     func search(_ query: String) async throws -> [Profile] {

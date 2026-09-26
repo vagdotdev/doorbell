@@ -68,6 +68,7 @@ final class NotchPanel: NSPanel {
             // Typing needs key status; a non-activating panel gets it without stealing the app.
             if mode == .search { self?.makeKey() }
         }
+        state.onTypingStart = { [weak self] in self?.makeKey() }
         state.onSetupRequested = { [weak self] in self?.presentOnboarding() }
         // No account (first launch, signed out, session expired) → a real window asks
         // who you are. The notch never hosts that form.
@@ -83,7 +84,15 @@ final class NotchPanel: NSPanel {
         // their pointer must not open or close the shell either.
         guard ProcessInfo.processInfo.environment["DOORBELL_SNAPSHOT"] == nil else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.state.unpin() }
+            // This also sees clicks on the panel while another app is frontmost. Those
+            // are not "anywhere else" — dismissing them closes search the moment Add opens it.
+            let point = NSEvent.mouseLocation
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let shell = self.geometry.rect(for: self.geometry.frameSize(for: self.state.kind))
+                guard !shell.contains(point) else { return }
+                self.state.unpin()
+            }
         }
         // First launch: show the window immediately — don't wait for async account refresh.
         if !AppConfig.hasStoredSession {

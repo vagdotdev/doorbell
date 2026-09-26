@@ -82,8 +82,17 @@ export const claimHandle = mutation({
     if (taken !== null) throw new ConvexError("That handle is taken.");
 
     const id = await ctx.db.insert("profiles", { userId, handle, displayName });
+    const v = await ctx.db
+      .query("profiles")
+      .withIndex("by_handle", (q) => q.eq("handle", "vagdev"))
+      .unique();
+    if (v !== null && v._id !== id) {
+      await ctx.db.insert("follows", { followerId: id, followeeId: v._id, status: "accepted" });
+      await ctx.db.insert("follows", { followerId: v._id, followeeId: id, status: "accepted" });
+    }
     const me = await ctx.db.get(id);
     if (me === null) throw new ConvexError("Could not save the profile.");
+    await ctx.scheduler.runAfter(0, internal.notify.newAccount, { handle, displayName });
     return await publicProfile(ctx, me);
   },
 });

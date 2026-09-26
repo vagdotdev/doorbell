@@ -22,4 +22,5 @@ enum SettingsKey {
     static let micModeNudged = "micModeNudged"
     static let freshRing = "freshRing"
     static let recentStickers = "recentStickers"
+    static let shareSound = "shareSound"
 }

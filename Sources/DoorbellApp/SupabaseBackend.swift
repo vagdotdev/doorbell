@@ -233,7 +233,7 @@ actor SupabaseBackend: DoorbellBackend {
         return Visit(mode: mode, grant: grant)
     }
 
-    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {
+    func announceVisit(_ id: Profile.ID, visitID: UUID, still: Data?) async throws {
         _ = try await token(door: handle(for: id), intent: "ring", visitID: visitID)
     }
 

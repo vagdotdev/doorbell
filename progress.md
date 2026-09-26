@@ -30,6 +30,15 @@ Done: occupied knock is Add to this call / End this call (`docs/bring-in-plan.md
 
 Done: stickers in room chat — animated Noto emoji roll, your own stickers sent peer-to-peer, system emoji palette.
 
+Done (needs Convex deploy, then a release): faster peephole (preview seat + still ride in the knock, warm camera), 6-hour door status bubbles, screen share with sound, pointing on shared screens.
+
+Done: /admin analytics on doorbellnotch.vercel.app — Convex-backed password login, LiveKit-webhook call ledger (calls, minutes, who-calls-who) — plus an ntfy.sh push on every new signup (`scripts/admin-setup.sh`).
+
+Done: Notes button next to Chat — Sarvam romanizes the call, writes English notes with
+glosses, hangs them on a secret `/n` page plus an Instinct feed.
+
+Done: Add on the building opens search.
+
 Now: Fresh Ring auto-updates on launch. Publish a new DMG so friends get the path-free binary.
 Done: app loads Sounds/Portraits from the installed bundle (no SwiftPM /Users/…/.build path); strip Xcode rpaths at pack time.
 

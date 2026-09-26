@@ -47,15 +47,26 @@ export const visit = action({
   },
 });
 export const announce = action({
-  args: { door: v.string(), visitId: v.string() }, returns: v.null(),
+  args: { door: v.string(), visitId: v.string(), still: v.optional(v.string()) }, returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
+    const lk = livekit();
     const d: Visit = await ctx.runQuery(internal.doors.inspectVisit, { visitId: args.visitId, side: "guest" });
     if (d.owner.handle !== args.door) throw new ConvexError("Not your visit.");
-    await requireSeat(step(d.owner, args.visitId), d.guest.handle);
-    await ctx.runMutation(internal.doors.announce, { visitId: args.visitId });
+    const room = step(d.owner, args.visitId);
+    await requireSeat(room, d.guest.handle);
+    // The owner's camera-private preview seat rides inside the knock, so their glass
+    // connects without another round trip. Only the owner can read their events.
+    const preview = { url: lk.publicUrl, room, token: await seat(d.owner, room, d.owner.handle, true, true) };
+    await ctx.runMutation(internal.doors.announce, { visitId: args.visitId, preview, still: knockStill(args.still) });
     return null;
   },
 });
+// A small JPEG of the visitor at the moment they knocked, shown until live video lands.
+// Anything else is dropped rather than failing the knock.
+function knockStill(still: string | undefined): string | undefined {
+  if (!still || still.length > 24_000 || !/^\/9j\/[A-Za-z0-9+/]+={0,2}$/.test(still)) return undefined;
+  return still;
+}
 export const leave = action({ args: { door: v.string(), visitId: v.string() }, returns: v.null(),
   handler: async (ctx, args): Promise<null> => { await ctx.runMutation(internal.doors.ringLeft, args); return null; } });
 // The legacy `hidden` argument means camera-private doorstep preview. LiveKit

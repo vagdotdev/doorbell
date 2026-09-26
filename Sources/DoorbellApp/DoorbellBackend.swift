@@ -35,12 +35,16 @@ protocol DoorbellBackend: Sendable {
     func removeFollower(_ id: Profile.ID) async throws
     func unfollow(_ id: Profile.ID) async throws
     func setCloseFriend(_ id: Profile.ID, _ on: Bool) async throws
+    /// Put a line over my door for six hours; friends see it on my card.
+    func setStatus(_ text: String) async throws -> DoorStatus
+    func clearStatus() async throws
 
     // Doors
     /// Go to someone's door. The backend decides whether that's a knock or a walk-in,
     /// tells them, and hands back a seat in their room.
     func visit(_ id: Profile.ID, visitID: UUID) async throws -> Visit
-    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws
+    /// `still`: a small JPEG of me, shown in their glass until live video arrives.
+    func announceVisit(_ id: Profile.ID, visitID: UUID, still: Data?) async throws
     /// Step away from their door.
     func leaveVisit(_ id: Profile.ID, visitID: UUID) async
     /// `hidden`: a seat on my doorstep — I see and hear the knocker, they don't see me.
@@ -53,11 +57,16 @@ protocol DoorbellBackend: Sendable {
 
     /// Development only: pretend something happened at my door.
     func simulate(_ event: DoorEvent) async
+
+    /// One speaker's audio, already in English letters.
+    func transcribeSpeech(wav: Data, speaker: String) async throws -> String
+    /// Turn the romanized transcript into notes on a secret page.
+    func writeMeetingNotes(host: String, people: [String], transcript: String) async throws -> MeetingNotes
 }
 
 extension DoorbellBackend {
     func removeFollower(_ id: Profile.ID) async throws { try await ignore(id) }
-    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {}
+    func announceVisit(_ id: Profile.ID, visitID: UUID, still: Data?) async throws {}
     func accountState() async -> AccountState { .ready }
     func accountEmail() async -> String? { nil }
     func accountNameQuota() async -> NameQuota? { nil }
@@ -75,9 +84,25 @@ extension DoorbellBackend {
         try await admit(id, visitID: visitID, into: room)
     }
     func simulate(_ event: DoorEvent) async {}
+    func setStatus(_ text: String) async throws -> DoorStatus { throw StatusError.unsupported }
+    func clearStatus() async throws { throw StatusError.unsupported }
+    func transcribeSpeech(wav: Data, speaker: String) async throws -> String { throw NotesError.unsupported }
+    func writeMeetingNotes(host: String, people: [String], transcript: String) async throws -> MeetingNotes {
+        throw NotesError.unsupported
+    }
 }
 
 enum DoorPolicyError: LocalizedError {
     case unsupported
     var errorDescription: String? { "Open Door Policy needs the current Doorbell backend." }
+}
+
+enum StatusError: LocalizedError {
+    case unsupported
+    var errorDescription: String? { "Statuses need the current Doorbell backend." }
+}
+
+enum NotesError: LocalizedError {
+    case unsupported
+    var errorDescription: String? { "Meeting notes need the current Doorbell backend." }
 }

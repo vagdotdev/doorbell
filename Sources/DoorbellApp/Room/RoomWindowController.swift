@@ -5,9 +5,11 @@ import SwiftUI
 @MainActor
 final class RoomWindowController: NSWindowController, NSWindowDelegate {
     private let session: RoomSession
+    private let pointerOverlay: PointerOverlay
 
     init(session: RoomSession, door: DoorController) {
         self.session = session
+        pointerOverlay = PointerOverlay(session: session)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 980, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],

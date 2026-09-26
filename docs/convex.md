@@ -28,15 +28,27 @@ Mac app (Swift)
 
 ## Files
 
-- `schema.ts` — `profiles`, `follows`, `closeFriends`, `doorEvents`, plus Convex Auth's tables.
+- `schema.ts` — `profiles`, `follows`, `closeFriends`, `doorEvents`, `doorStatus`, plus Convex Auth's tables.
 - `auth.ts`, `auth.config.ts`, `http.ts` — Convex Auth, Password provider, JWKS routes.
 - `lib.ts` — `requireProfile`, `follows`, `closeFriendEdge`. Every rule from
   `docs/how-it-works.md` is checked here, in functions, instead of RLS.
 - `profiles.ts` — `account`, `claimHandle`, `search`, `update`, `generateUploadUrl`, `setAvatar`, `clearAvatar`.
 - `graph.ts` — `hallway`, `request`, `accept`, `ignore`, `unfollow`, `setCloseFriend`.
+- `status.ts` — `set`, `clear`, and the scheduled `expire` for six-hour door statuses; `hallway`
+  returns `myStatus` and each door's `status`.
 - `doors.ts` — `events` (the owner's subscription), `ack`, and the internal ring / sweep.
 - `doorActions.ts` — `visit`, `leave`, `answer`, `admit`. LiveKit config is checked before
   anything is written, so a misconfigured deployment never rings a door it can't seat.
+- `admin.ts` — `wipeAll`, plus the `/admin` dashboard on the landing site: `login` trades
+  the password (only its SHA-256 lives on the deployment, `ADMIN_PASSWORD_SHA256`) for a
+  12-hour session token; `stats` aggregates people, calls, minutes, knocks and pairs.
+- `calls.ts` + `POST /livekit/webhook` in `http.ts` — LiveKit Cloud posts signed
+  join/leave events; verified rows land in `callSessions` and feed `admin:stats`.
+- `notify.ts` — new-signup push to a secret ntfy.sh topic (`NTFY_TOPIC`), scheduled from
+  `claimHandle`. `scripts/admin-setup.sh [--prod]` sets both env vars and prints the
+  password once.
+- `notes.ts` — Sarvam `translit` + `sarvam-105b` notes. `SARVAM_API_KEY` lives on the
+  deployment. `GET /n?t=` is one note; `GET /n/feed?t=` is the Instinct inbox.
 - `seed.ts` + `scripts/seed-convex.sh` — alice, bob, carol.
 
 ## A knock
@@ -46,7 +58,8 @@ schedules a sweep 90 s out, and mints the knocker's doorstep seat. The owner's a
 subscribed to `doors:events`; on delivery it rings and calls `doors:ack`, which deletes the
 row. Acks are retried for any row still present, so a restart cannot re-ring an old knock.
 `answer` and `admit` put both sides in the room; `admit` delivers the guest's grant as an
-`admitted` row the same way.
+`admitted` row the same way. `announce` puts the owner's hidden preview seat and the
+visitor's optional `still` in the knock row itself, so the owner's glass skips `answer`.
 
 ## Sessions
 

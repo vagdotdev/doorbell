@@ -12,6 +12,8 @@ final class HallwayStore: ObservableObject {
     @Published private(set) var doors: [Door] = []
     @Published private(set) var requests: [Profile] = []
     @Published private(set) var outgoing: Set<String> = []
+    /// The line over my own door.
+    @Published private(set) var myStatus: DoorStatus?
     /// Last knock, walk-in, or visit — drives left-to-right order in the building.
     private var activityAt: [Profile.ID: Date] = [:]
     /// Friends who knocked and haven't been answered yet — float left.
@@ -59,7 +61,7 @@ final class HallwayStore: ObservableObject {
         nameQuota = quota
         guard next == .ready else {
             account = next
-            me = nil; doors = []; requests = []; outgoing = []
+            me = nil; doors = []; requests = []; outgoing = []; myStatus = nil
             activityAt = [:]; waitingKnocks = []
             return
         }
@@ -68,6 +70,7 @@ final class HallwayStore: ObservableObject {
             guard version == refreshVersion, !isSigningOut else { return }
             account = .ready
             me = snap.me; doors = snap.doors; requests = snap.requests; outgoing = snap.outgoing
+            myStatus = snap.myStatus
         } catch {
             guard version == refreshVersion, !isSigningOut else { return }
             account = .unavailable
@@ -157,6 +160,20 @@ final class HallwayStore: ObservableObject {
     func unfollow(_ profile: Profile) { perform { try await $0.unfollow(profile.id) } }
     func setCloseFriend(_ profile: Profile, _ on: Bool) {
         perform { try await $0.setCloseFriend(profile.id, on) }
+    }
+
+    /// Shown at once; the server's copy (and its exact expiry) replaces it on refresh.
+    func setStatus(_ text: String) {
+        let line = String(text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(DoorStatus.maxLength))
+        guard !line.isEmpty, line != myStatus?.text else { return }
+        myStatus = DoorStatus(text: line, expiresAt: Date() + DoorStatus.lifetime)
+        perform { _ = try await $0.setStatus(line) }
+    }
+
+    func clearStatus() {
+        guard myStatus != nil else { return }
+        myStatus = nil
+        perform { try await $0.clearStatus() }
     }
 
     // MARK: Activity (door order)

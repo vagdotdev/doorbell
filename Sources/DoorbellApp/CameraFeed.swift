@@ -118,10 +118,11 @@ struct LiveVideo: View {
     let track: VideoTrack
     var mirrored = false
     var fit = false
+    var isRendering: Binding<Bool>?
 
     var body: some View {
         // LiveKit's mirror flag is unreliable on macOS; flip the view instead.
-        SwiftUIVideoView(track, layoutMode: fit ? .fit : .fill, mirrorMode: .off)
+        SwiftUIVideoView(track, layoutMode: fit ? .fit : .fill, mirrorMode: .off, isRendering: isRendering)
             .scaleEffect(x: mirrored ? -1 : 1, y: 1)
             .background(Color(white: 0.08))
     }

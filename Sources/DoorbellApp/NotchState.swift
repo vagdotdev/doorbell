@@ -58,6 +58,14 @@ final class NotchState: ObservableObject {
     /// Keeps the board open without a pointer over it: the moment after first launch,
     /// so the notch can show itself once before it goes quiet.
     @Published var heldOpen = false { didSet { if oldValue != heldOpen { recompute() } } }
+    /// Writing my status: the board stays open and takes the keyboard.
+    @Published var isTyping = false {
+        didSet {
+            guard oldValue != isTyping else { return }
+            if isTyping { onTypingStart?() }
+            recompute()
+        }
+    }
     /// The intro that plays each time the board opens.
     /// `.playing` owns the avatars' geometry; `.settling` hands it to the building.
     @Published var splash: SplashPhase = .pending
@@ -71,6 +79,7 @@ final class NotchState: ObservableObject {
 
     var onKindChange: ((ShellKind) -> Void)?
     var onModeChange: ((ShellMode) -> Void)?
+    var onTypingStart: (() -> Void)?
     /// Signed out: the board offers to finish setting up, which happens in a window.
     var onSetupRequested: (() -> Void)?
 
@@ -80,6 +89,7 @@ final class NotchState: ObservableObject {
     /// Back to the plain hallway; collapses if the mouse has left.
     /// Door moments are not dismissed this way.
     func unpin() {
+        isTyping = false
         switch mode {
         case .search, .requests, .settings: mode = .building
         default: break
@@ -102,7 +112,7 @@ final class NotchState: ObservableObject {
     }
 
     private func recompute() {
-        let expanded = hoverSettled || mode.pins || heldOpen
+        let expanded = hoverSettled || mode.pins || heldOpen || isTyping
         let next: ShellKind = !expanded ? .compact : mode.isPinhole ? .pinhole : mode.isDoor ? .door : .board
         guard next != kind else { return }
         // The pinhole is not an event: it eases in, it does not spring.

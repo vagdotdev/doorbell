@@ -16,11 +16,14 @@ struct AvatarView: View {
         (Color(red: 0.98, green: 0.56, blue: 0.70), Color(red: 0.74, green: 0.26, blue: 0.50)),
     ]
 
-    private var palette: (Color, Color) {
+    private var palette: (Color, Color) { Self.palette(for: profile.handle) }
+
+    /// The same two colours wherever this person appears: their disc, their pointer.
+    static func palette(for handle: String) -> (Color, Color) {
         // djb2 — Hashable's hashValue is randomised per process.
         var h: UInt32 = 5381
-        for b in profile.handle.utf8 { h = (h &* 33) &+ UInt32(b) }
-        return Self.palettes[Int(h % UInt32(Self.palettes.count))]
+        for b in handle.utf8 { h = (h &* 33) &+ UInt32(b) }
+        return palettes[Int(h % UInt32(palettes.count))]
     }
 
     private var initials: String {

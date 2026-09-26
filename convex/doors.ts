@@ -14,7 +14,7 @@ const decision = v.object({ mode: v.union(v.literal("knock"), v.literal("walk_in
 export const events = query({
   args: {},
   returns: v.array(v.object({ id: v.id("doorEvents"), visitId: v.string(), kind: kindValidator,
-    from: profileValidator, grant: v.union(grantValidator, v.null()) })),
+    from: profileValidator, grant: v.union(grantValidator, v.null()), still: v.union(v.string(), v.null()) })),
   handler: async (ctx) => {
     const me = await requireProfile(ctx).catch(() => null);
     if (!me) return [];
@@ -24,7 +24,7 @@ export const events = query({
       if (!row.visitId) continue; // Old clients cannot create valid v2 arrivals.
       const from = await ctx.db.get(row.fromProfileId);
       if (from) out.push({ id: row._id, visitId: row.visitId, kind: row.kind,
-        from: await publicProfile(ctx, from), grant: row.grant ?? null });
+        from: await publicProfile(ctx, from), grant: row.grant ?? null, still: row.still ?? null });
     }
     return out;
   },
@@ -84,7 +84,7 @@ export const inspectVisit = internalQuery({
   },
 });
 export const announce = internalMutation({
-  args: { visitId: v.string() }, returns: v.null(),
+  args: { visitId: v.string(), preview: v.optional(grantValidator), still: v.optional(v.string()) }, returns: v.null(),
   handler: async (ctx, args) => {
     const me = await requireProfile(ctx), visit = await findVisit(ctx, args.visitId);
     if (!visit || visit.guestId !== me._id) throw new ConvexError("Not your visit.");
@@ -95,7 +95,7 @@ export const announce = internalMutation({
     // Close permission can be revoked while the media connection is being established.
     const mode = await mayWalkIn(ctx, me._id, owner) ? "walk_in" as const : "knock" as const;
     await ctx.db.patch(visit._id, { status: "announced", mode });
-    await ring(ctx, visit.ownerId, me._id, visit.visitId, mode);
+    await ring(ctx, visit.ownerId, me._id, visit.visitId, mode, args.preview, args.still);
     return null;
   },
 });
@@ -195,10 +195,10 @@ async function cancel(ctx: MutationCtx, visit: Doc<"visits">) {
   await ring(ctx, visit.ownerId, visit.guestId, visit.visitId, "left");
 }
 async function ring(ctx: MutationCtx, to: Id<"profiles">, from: Id<"profiles">, visitId: string,
-  kind: Doc<"doorEvents">["kind"], grant?: { url: string; token: string; room: string }) {
+  kind: Doc<"doorEvents">["kind"], grant?: { url: string; token: string; room: string }, still?: string) {
   const stale = await ctx.db.query("doorEvents").withIndex("by_pair", q => q.eq("toProfileId", to).eq("fromProfileId", from)).take(100);
   for (const row of stale) if (row.visitId === visitId) await ctx.db.delete(row._id);
-  const id = await ctx.db.insert("doorEvents", { toProfileId: to, fromProfileId: from, visitId, kind, grant });
+  const id = await ctx.db.insert("doorEvents", { toProfileId: to, fromProfileId: from, visitId, kind, grant, still });
   await ctx.scheduler.runAfter(EVENT_TTL_MS, internal.doors.sweep, { eventId: id });
 }
 

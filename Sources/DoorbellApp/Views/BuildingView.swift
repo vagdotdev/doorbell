@@ -52,6 +52,10 @@ private struct DoorCard: View {
                     // Hover: the glass comes forward, in the one cold light.
                     .shadow(color: DesignTokens.horizon.opacity(hovering ? 0.28 : 0), radius: 12)
                     .buildingAvatar(door.profile.id)
+                    .overlay(alignment: .top) {
+                        DoorStatusBubble(status: door.status)
+                            .alignmentGuide(.top) { $0[.bottom] + 6 }
+                    }
                 VStack(spacing: 1) {
                     Text(firstName)
                         .font(.system(size: 12, weight: .medium))
@@ -104,6 +108,10 @@ private struct OwnDoorCard: View {
             AvatarView(profile: me, size: avatarSize)
                 .shadow(color: DesignTokens.horizon.opacity(hovering ? 0.28 : 0), radius: 12)
                 .buildingAvatar(me.id)
+                .overlay(alignment: .top) {
+                    MyStatusBubble()
+                        .alignmentGuide(.top) { $0[.bottom] + 6 }
+                }
             VStack(spacing: 1) {
                 Text("You")
                     .font(.system(size: 12, weight: .medium))
@@ -145,6 +153,7 @@ private struct AddDoorCard: View {
                 }
             }
             .frame(width: cardWidth)
+            .contentShape(Rectangle())
             .scaleEffect(hovering ? 1.05 : 1)
             .animation(DesignTokens.spring, value: hovering)
         }

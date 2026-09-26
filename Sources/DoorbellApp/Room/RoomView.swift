@@ -1,3 +1,5 @@
+import AppKit
+import LiveKit
 import SwiftUI
 
 /// Black, clean, quiet. Tiles, a strip of controls, a drawer for people or chat.
@@ -10,8 +12,9 @@ struct RoomView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                if let share = room.media.localScreen ?? room.media.peers.compactMap(\.screen).first {
-                    LiveVideo(track: share, fit: true)
+                if let (share, sharer) = sharedScreen {
+                    SharedScreen(track: share, sharer: sharer, isMine: sharer == room.me?.handle, pointers: room.pointers,
+                                 onPoint: { room.point(at: $0, on: sharer) }, onPing: { room.ping(at: $0, on: sharer) })
                         .padding(.horizontal, 16).padding(.top, 44)
                     TileGrid(participants: room.participants).frame(height: 120).padding(.horizontal, 16)
                 } else {
@@ -32,6 +35,10 @@ struct RoomView: View {
                 ChatDrawer()
                     .frame(width: 300)
                     .transition(drawerTransition)
+            } else if room.notesOpen {
+                NotesDrawer()
+                    .frame(width: 300)
+                    .transition(drawerTransition)
             }
         }
         .background(RoomBackdrop())
@@ -46,6 +53,7 @@ struct RoomView: View {
         }
         .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.chatOpen)
         .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.peopleOpen)
+        .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: room.notesOpen)
         .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.2), value: door.visitor)
         .sheet(isPresented: $room.sharePickerOpen) { SharePicker(media: room.media) }
         .sheet(isPresented: $room.devicesOpen) { DevicePicker(media: room.media) }
@@ -54,6 +62,12 @@ struct RoomView: View {
 
     private var drawerTransition: AnyTransition {
         reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity)
+    }
+
+    /// The screen on show and whose it is.
+    private var sharedScreen: (VideoTrack, String)? {
+        if let mine = room.media.localScreen, let me = room.me { return (mine, me.handle) }
+        return room.media.peers.first { $0.screen != nil }.flatMap { peer in peer.screen.map { ($0, peer.id) } }
     }
 }
 
@@ -260,6 +274,9 @@ private struct ControlBar: View {
                         tint: room.peopleOpen ? .active : .neutral) { room.togglePeople() }
             RoomControl(label: "Chat", symbol: "bubble.left.fill",
                         tint: room.chatOpen ? .active : .neutral, badge: room.unread) { room.toggleChat() }
+            RoomControl(label: room.notesOn ? "Stop notes" : "Meeting notes", symbol: "doc.text",
+                        tint: room.notesOn || room.notesOpen ? .active : .neutral) { room.toggleNotes() }
+                .disabled(room.notesWriting)
             RoomControl(label: "Leave room", symbol: "phone.down.fill", tint: .leave, wide: true) {
                 door.closeRoom()
             }
@@ -365,6 +382,65 @@ private struct PeopleDrawer: View {
         }
         .background(Color(white: 0.05))
         .overlay(alignment: .leading) { Rectangle().fill(DesignTokens.hairline).frame(width: 1) }
+    }
+}
+
+// MARK: - Notes
+
+private struct NotesDrawer: View {
+    @EnvironmentObject private var room: RoomSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(DesignTokens.ink)
+                .padding(.horizontal, 16)
+                .padding(.top, 46)
+                .padding(.bottom, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let notes = room.notesResult {
+                        Text(notes.text)
+                            .font(.system(size: 13))
+                            .foregroundStyle(DesignTokens.ink)
+                            .textSelection(.enabled)
+                        Button("Copy board link") { copy(notes.inboxURL) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(DesignTokens.utility)
+                            .help("Instinct can watch this unlisted feed and email new notes.")
+                        Button("Copy this note") { copy(notes.url) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(DesignTokens.inkSecondary)
+                    } else if room.notesLines.isEmpty {
+                        Text(room.notesOn ? "Listening…" : "Click Notes to start. Speech is written in English letters, with a short meaning in parentheses.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(DesignTokens.inkSecondary)
+                    } else {
+                        ForEach(Array(room.notesLines.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(size: 13))
+                                .foregroundStyle(DesignTokens.ink)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+        }
+        .background(Color(white: 0.05))
+        .overlay(alignment: .leading) { Rectangle().fill(DesignTokens.hairline).frame(width: 1) }
+    }
+
+    private var title: String { room.notesWriting ? "Writing notes…" : "Notes" }
+
+    private func copy(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
     }
 }
 

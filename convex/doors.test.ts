@@ -41,8 +41,36 @@ test("knock rings only after media connects; exact UUID and public profile reach
   waiting.set(seat.room, ["alice"]);
   await alice.as.action(api.doorActions.announce, { door: "bob", visitId });
   await alice.as.action(api.doorActions.announce, { door: "bob", visitId });
-  expect(await bob.as.query(api.doors.events, {})).toMatchObject([{ visitId, kind: "knock", from: { handle: "alice" }, grant: null }]);
+  expect(await bob.as.query(api.doors.events, {})).toMatchObject([{ visitId, kind: "knock", from: { handle: "alice" }, grant: { room: seat.room }, still: null }]);
   for (const who of [alice.as, carol.as, t]) expect(await who.query(api.doors.events, {})).toEqual([]);
+});
+test("the knock carries the owner's camera-private preview seat, identical to answering hidden", async () => {
+  const { alice, bob, carol } = await town();
+  for (const guest of [alice, carol]) {
+    const { seat, visitId } = await arrive(guest);
+    const [event] = (await bob.as.query(api.doors.events, {})).filter(e => e.visitId === visitId);
+    const answered = await bob.as.action(api.doorActions.answer, { hidden: true, visitId });
+    const carried = claims(event.grant!.token), fresh = claims(answered.token);
+    expect(event.grant!.room).toBe(seat.room);
+    expect(carried.sub).toBe("bob");
+    expect(carried.video).toEqual(fresh.video);
+    expect(carried.video).toMatchObject({ room: seat.room, hidden: false, canPublishSources: ["microphone"], canPublishData: false });
+    expect(JSON.parse(carried.metadata)).toEqual(JSON.parse(fresh.metadata));
+    expect(carried.exp - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(60);
+  }
+  expect(await alice.as.query(api.doors.events, {})).toEqual([]);
+});
+test("a knock can carry a small JPEG still; anything else is dropped without failing the knock", async () => {
+  const { alice, bob } = await town();
+  const jpeg = "/9j/" + "A".repeat(4_000);
+  for (const [still, expected] of [[jpeg, jpeg], ["iVBORw0KGgo=", null], ["/9j/" + "A".repeat(30_000), null], ["/9j/<script>", null]] as const) {
+    const visitId = crypto.randomUUID();
+    const seat = await alice.as.action(api.doorActions.visit, { door: "bob", visitId });
+    waiting.set(seat.room, ["alice"]);
+    await alice.as.action(api.doorActions.announce, { door: "bob", visitId, still });
+    const [event] = (await bob.as.query(api.doors.events, {})).filter(e => e.visitId === visitId);
+    expect(event).toMatchObject({ kind: "knock", still: expected });
+  }
 });
 test("close friends also wait outside; simultaneous visitors have separate preview rooms", async () => {
   const { alice, bob, carol } = await town();

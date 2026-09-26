@@ -205,10 +205,36 @@ actor ConvexBackend: DoorbellBackend {
         for p in [row.me] + row.doors.map(\.profile) + row.requests { known[p.id] = p.profile }
         snapshot = HallwaySnapshot(
             me: row.me.profile,
-            doors: row.doors.map { Door(profile: $0.profile.profile, followsMe: $0.followsMe, isCloseFriend: $0.isCloseFriend) },
+            doors: row.doors.map { Door(profile: $0.profile.profile, followsMe: $0.followsMe, isCloseFriend: $0.isCloseFriend,
+                                        status: $0.status?.status) },
             requests: row.requests.map(\.profile),
-            outgoing: Set(row.outgoing))
+            outgoing: Set(row.outgoing),
+            myStatus: row.myStatus?.status)
         updatesOut.yield()
+    }
+
+    func setStatus(_ text: String) async throws -> DoorStatus {
+        let row: StatusRow = try await client.mutation("status:set", with: ["text": text])
+        snapshot?.myStatus = row.status
+        updatesOut.yield()
+        return row.status
+    }
+
+    func clearStatus() async throws {
+        try await client.mutation("status:clear", with: [:])
+        snapshot?.myStatus = nil
+        updatesOut.yield()
+    }
+
+    func transcribeSpeech(wav: Data, speaker: String) async throws -> String {
+        try await client.action("notes:transcribe", with: ["wav": ConvexBytes(data: wav), "speaker": speaker])
+    }
+
+    func writeMeetingNotes(host: String, people: [String], transcript: String) async throws -> MeetingNotes {
+        let row: NotesRow = try await client.action(
+            "notes:write",
+            with: ["host": host, "people": people.map { $0 as ConvexEncodable? }, "transcript": transcript])
+        return row.value
     }
 
     func search(_ query: String) async throws -> [Profile] {
@@ -245,8 +271,10 @@ actor ConvexBackend: DoorbellBackend {
         return Visit(mode: seat.mode == "walk_in" ? .walkIn : .knock, grant: seat.grant)
     }
 
-    func announceVisit(_ id: Profile.ID, visitID: UUID) async throws {
-        try await client.action("doorActions:announce", with: ["door": try handle(for: id), "visitId": visitID.uuidString.lowercased()])
+    func announceVisit(_ id: Profile.ID, visitID: UUID, still: Data?) async throws {
+        var args: [String: ConvexEncodable?] = ["door": try handle(for: id), "visitId": visitID.uuidString.lowercased()]
+        if let still { args["still"] = still.base64EncodedString() }
+        try await client.action("doorActions:announce", with: args)
     }
 
     func leaveVisit(_ id: Profile.ID, visitID: UUID) async {
@@ -289,8 +317,8 @@ actor ConvexBackend: DoorbellBackend {
                 known[who.id] = who
                 NSLog("door: \(who.handle) \(row.kind)")
                 switch row.kind {
-                case "knock": eventsOut.yield(.knock(who, visitID: visitID))
-                case "walk_in": eventsOut.yield(.walkIn(who, visitID: visitID))
+                case "knock": eventsOut.yield(.knock(who, visitID: visitID, payload: row.payload))
+                case "walk_in": eventsOut.yield(.walkIn(who, visitID: visitID, payload: row.payload))
                 case "left": eventsOut.yield(.visitorLeft(who, visitID: visitID))
                 case "admitted":
                     if let grant = row.grant?.grant {
@@ -378,6 +406,7 @@ private struct DoorRow: Decodable, Sendable {
     let profile: ProfileRow
     let followsMe: Bool
     let isCloseFriend: Bool
+    let status: StatusRow?
 }
 
 private struct HallwayRow: Decodable, Sendable {
@@ -385,6 +414,14 @@ private struct HallwayRow: Decodable, Sendable {
     let doors: [DoorRow]
     let requests: [ProfileRow]
     let outgoing: [String]
+    let myStatus: StatusRow?
+}
+
+private struct StatusRow: Decodable, Sendable {
+    let text: String
+    /// Milliseconds since epoch.
+    let expiresAt: Double
+    var status: DoorStatus { DoorStatus(text: text, expiresAt: Date(timeIntervalSince1970: expiresAt / 1000)) }
 }
 
 private struct GrantRow: Decodable, Sendable {
@@ -400,6 +437,11 @@ private struct EventRow: Decodable, Sendable {
     let kind: String
     let from: ProfileRow
     let grant: GrantRow?
+    let still: String?
+
+    var payload: KnockPayload {
+        KnockPayload(preview: grant?.grant, still: still.flatMap { Data(base64Encoded: $0) })
+    }
 }
 
 private struct SeatRow: Decodable, Sendable {
@@ -408,6 +450,15 @@ private struct SeatRow: Decodable, Sendable {
     let token: String
     let room: String
     var grant: MediaGrant { MediaGrant(url: url, token: token, room: room) }
+}
+
+private struct NotesRow: Decodable, Sendable {
+    let notes: String
+    let url: String
+    let inboxUrl: String
+    var value: MeetingNotes {
+        MeetingNotes(text: notes, url: URL(string: url)!, inboxURL: URL(string: inboxUrl)!)
+    }
 }
 
 struct ConvexBytes: ConvexEncodable {
