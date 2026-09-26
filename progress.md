@@ -39,9 +39,11 @@ glosses, hangs them on a secret `/n` page plus an Instinct feed.
 
 Done: Add on the building opens search.
 
-Now: Fresh Ring auto-updates on launch. Publish a new DMG so friends get the path-free binary.
+Done: release v2026.09.27-0234-7e2b5e8 is on Fresh Ring.
 Done: app loads Sounds/Portraits from the installed bundle (no SwiftPM /Users/…/.build path); strip Xcode rpaths at pack time.
 
-Next: utilities, app window for settings (`docs/first-launch.md` §3), ship. Supabase stack is legacy beside Convex.
+Now: utilities, app window for settings (`docs/first-launch.md` §3).
+
+Next: Supabase stack is legacy beside Convex.
 
 Details: `what this is.md`, `docs/how-it-works.md`, `docs/plan.md`, `docs/convex.md`.
