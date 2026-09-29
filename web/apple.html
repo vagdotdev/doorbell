@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>Doorbell — Knock, knock.</title>
+  <meta name="description" content="Doorbell turns your Mac’s notch into a door. Friends knock. You peek. Close friends walk right in.">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <style>
+    :root {
+      --white: #ffffff;
+      --cloud: #f5f5f7;
+      --graphite: #1d1d1f;
+      --slate: #6e6e73;
+      --steel: #86868b;
+      --divider: #d6d6d6;
+      --blue: #0071e3;
+      --link: #0066cc;
+      --link-dark: #2997ff;
+      --new: #b64400;
+      --new-dark: #f56300;
+
+      --green: #4dd980;
+      --horizon: 179, 199, 230;
+
+      --display: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --text: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      --section: 160px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      -webkit-font-smoothing: antialiased;
+      scroll-behavior: smooth;
+      scroll-padding-top: 52px;
+    }
+
+    body {
+      background: #000;
+      color: var(--graphite);
+      font: 400 17px/1.47 var(--text);
+      letter-spacing: -0.022em;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    svg { display: block; }
+    .ic { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Local product nav */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: 52px;
+      color: #f5f5f7;
+      background: rgba(22, 22, 23, 0.9);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .nav-inner {
+      max-width: 1024px;
+      height: 100%;
+      margin: 0 auto;
+      padding: 0 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-title { font: 600 21px/1 var(--display); letter-spacing: 0.011em; }
+    .nav-links { display: flex; align-items: center; gap: 24px; font-size: 12px; letter-spacing: -0.01em; }
+    .nav-links a { color: rgba(255, 255, 255, 0.8); transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; }
+    .nav-links .pill-sm {
+      color: #fff;
+      background: var(--blue);
+      padding: 4px 11px;
+      border-radius: 980px;
+      line-height: 1.33;
+    }
+    .nav-links .pill-sm:hover { background: #0077ed; }
+
+    /* Shared type */
+    .dark { background: #000; color: #f5f5f7; }
+    .gray { background: var(--cloud); }
+    section { padding: var(--section) 0; background: var(--white); }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 0 22px; }
+    .wide { max-width: 1124px; margin: 0 auto; padding: 0 22px; }
+    .center { text-align: center; }
+
+    .eyebrow { font: 600 17px/1.24 var(--text); color: var(--new); margin-bottom: 6px; }
+    .dark .eyebrow { color: var(--new-dark); }
+    .kicker {
+      font: 600 clamp(21px, 2.4vw, 28px)/1.14 var(--display);
+      letter-spacing: 0.007em;
+      color: var(--steel);
+      margin-bottom: 12px;
+    }
+    .h-cinema { font: 600 clamp(44px, 7.4vw, 80px)/1.05 var(--display); letter-spacing: -0.015em; }
+    .h-hero { font: 600 clamp(40px, 6vw, 64px)/1.0625 var(--display); letter-spacing: -0.009em; }
+    .h-section { font: 600 clamp(32px, 4.4vw, 48px)/1.08 var(--display); letter-spacing: -0.003em; }
+    .h-card { font: 600 24px/1.17 var(--display); letter-spacing: 0.009em; }
+    .lede {
+      font: 400 clamp(19px, 1.9vw, 21px)/1.381 var(--display);
+      letter-spacing: 0.011em;
+      color: var(--slate);
+    }
+    .dark .lede { color: #a1a1a6; }
+    .lede strong, .cols strong { font-weight: 600; color: var(--graphite); }
+    .dark .lede strong, .dark .cols strong { color: #f5f5f7; }
+
+    .pill {
+      display: inline-block;
+      color: #fff;
+      background: var(--blue);
+      font-size: 17px;
+      line-height: 1.18;
+      padding: 12px 22px;
+      border-radius: 980px;
+      transition: background 0.2s;
+    }
+    .pill:hover { background: #0077ed; }
+    .pill:focus-visible, .link:focus-visible, .seg button:focus-visible, .film-ctl:focus-visible, .copy:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 3px;
+    }
+    .link { color: var(--link); font-size: 17px; }
+    .link:hover { text-decoration: underline; }
+    .dark .link { color: var(--link-dark); }
+
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      color: var(--slate);
+    }
+    .dark .cols { color: var(--steel); }
+    .cols h3 { font: 600 17px/1.24 var(--text); color: var(--graphite); margin: 16px 0 6px; }
+    .cols .ic { width: 28px; height: 28px; color: var(--graphite); stroke-width: 1.6; }
+
+    /* Scale a fixed-size illustration to its frame */
+    .fit { position: relative; width: 100%; }
+    .stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+
+    /* Hero */
+    .hero { padding: 72px 0 120px; overflow: hidden; }
+    .hero-icon { width: 104px; height: 104px; margin: 0 auto 18px; }
+    .hero h1 { font: 600 clamp(24px, 2.6vw, 32px)/1.13 var(--display); letter-spacing: 0.004em; margin-bottom: 6px; }
+    .hero .h-cinema { margin-bottom: 20px; }
+    .hero .lede { max-width: 620px; margin: 0 auto; }
+    .ctas { display: flex; align-items: center; justify-content: center; gap: 32px; margin-top: 36px; flex-wrap: wrap; }
+    .fine { font-size: 12px; line-height: 1.33; letter-spacing: -0.01em; color: var(--steel); }
+    .hero .fine { margin-top: 20px; }
+
+    .film { margin: 80px auto 0; }
+    .film-frame {
+      aspect-ratio: 1080 / 600;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #0a0e1c;
+    }
+    .film-ctl {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      z-index: 20;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: rgba(0, 0, 0, 0.56);
+      background: rgba(210, 210, 215, 0.64);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      transition: background 0.2s;
+    }
+    .film-ctl:hover { background: rgba(223, 223, 227, 0.72); }
+    .film-ctl svg { width: 14px; height: 14px; fill: currentColor; }
+    .film-ctl .play { display: none; }
+    .film-ctl.paused .play { display: block; }
+    .film-ctl.paused .pause { display: none; }
+
+    /* The desktop */
+    #film { width: 1080px; height: 600px; color: #fff; }
+    .wallpaper {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(55% 55% at 80% 104%, rgba(255, 150, 90, 0.34), transparent 70%),
+        radial-gradient(60% 60% at 18% 100%, rgba(80, 100, 255, 0.34), transparent 70%),
+        radial-gradient(110% 75% at 50% 122%, #3d2b6b 0%, transparent 62%),
+        linear-gradient(180deg, #060913 0%, #0e1430 55%, #221b46 100%);
+    }
+    .menubar {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 34px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font: 400 13px/1 var(--text);
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(8, 10, 22, 0.4);
+    }
+    .menubar .left, .menubar .right { display: flex; align-items: center; gap: 20px; }
+    .menubar b { font-weight: 600; }
+    .menubar .right { gap: 16px; }
+    .menubar .ic { width: 16px; height: 16px; stroke-width: 1.7; }
+
+    .shell {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      z-index: 3;
+      width: 190px;
+      height: 34px;
+      transform: translateX(-50%);
+      transform-origin: 50% 0;
+      background: #000;
+      border-radius: 0 0 12px 12px;
+      overflow: hidden;
+      transition:
+        width 0.5s var(--ease),
+        height 0.5s var(--ease),
+        border-radius 0.5s var(--ease),
+        box-shadow 0.5s ease;
+    }
+    .shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      background-image:
+        radial-gradient(1px 1px at 9% 18%, rgba(255,255,255,0.55) 50%, transparent 51%),
+        radial-gradient(1px 1px at 22% 64%, rgba(255,255,255,0.25) 50%, transparent 51%),
+        radial-gradient(1px 1px at 31% 12%, rgba(255,255,255,0.35) 50%, transparent 51%),
+        radial-gradient(1px 1px at 72% 20%, rgba(255,255,255,0.4) 50%, transparent 51%),
+        radial-gradient(1px 1px at 84% 52%, rgba(255,255,255,0.25) 50%, transparent 51%),
+        radial-gradient(1px 1px at 91% 14%, rgba(255,255,255,0.5) 50%, transparent 51%),
+        radial-gradient(1px 1px at 64% 70%, rgba(255,255,255,0.2) 50%, transparent 51%),
+        radial-gradient(1px 1px at 14% 80%, rgba(255,255,255,0.3) 50%, transparent 51%);
+    }
+    #film.knock .shell { animation: knock 0.8s ease-out; }
+    @keyframes knock {
+      0%, 100% { transform: translateX(-50%) scale(1, 1); }
+      14% { transform: translateX(-50%) scale(1.05, 1.22); }
+      30% { transform: translateX(-50%) scale(1, 1); }
+      46% { transform: translateX(-50%) scale(1.05, 1.22); }
+      64% { transform: translateX(-50%) scale(1, 1); }
+    }
+    #film.open .shell {
+      width: 460px;
+      height: 352px;
+      border-radius: 28px;
+      box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06), 0 26px 70px rgba(0, 0, 0, 0.6);
+    }
+    #film.open .shell::before { opacity: 1; }
+
+    .door { position: absolute; inset: 0; opacity: 0; transition: opacity 0.2s ease; }
+    #film.open .door { opacity: 1; transition: opacity 0.35s ease 0.2s; }
+    .door-title { position: absolute; top: 46px; left: 0; right: 0; text-align: center; }
+    .door-name { font: 600 17px/1.2 var(--text); color: #fff; }
+    .door-status { font: 400 12px/1.3 var(--text); color: rgba(255, 255, 255, 0.55); margin-top: 3px; letter-spacing: 0; }
+    .door-glass { position: absolute; top: 96px; left: 50%; width: 150px; height: 150px; margin-left: -75px; }
+    .doorstep {
+      position: absolute;
+      top: 262px;
+      left: -80px;
+      right: -80px;
+      height: 420px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, rgba(var(--horizon), 0.05), transparent 22%);
+      box-shadow: inset 0 1px 0 rgba(var(--horizon), 0.3);
+      -webkit-mask-image: linear-gradient(90deg, transparent 8%, #000 36%, #000 64%, transparent 92%);
+      mask-image: linear-gradient(90deg, transparent 8%, #000 36%, #000 64%, transparent 92%);
+    }
+    #film.open .doorstep { animation: flare 1.8s ease-out 0.25s both; }
+    @keyframes flare {
+      0% { box-shadow: inset 0 1px 0 rgba(var(--horizon), 0.3); }
+      20% { box-shadow: inset 0 1.5px 0 rgba(var(--horizon), 0.85), inset 0 8px 20px rgba(var(--horizon), 0.12); }
+      100% { box-shadow: inset 0 1px 0 rgba(var(--horizon), 0.3); }
+    }
+    .door-controls {
+      position: absolute;
+      top: 272px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 14px;
+    }
+    .ctl {
+      width: 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      font: 400 11px/1.2 var(--text);
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .ctl i {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.07);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .ctl i .ic { width: 18px; height: 18px; stroke-width: 2; }
+    .ctl.accept i { color: #062a14; background: var(--green); box-shadow: none; }
+    #film.pressed .ctl.accept i { transform: scale(0.9); filter: brightness(1.15); }
+
+    .cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 10;
+      width: 22px;
+      height: 22px;
+      opacity: 0;
+      transform: translate(880px, 520px);
+      transition: transform 1.1s cubic-bezier(0.45, 0.05, 0.25, 1), opacity 0.3s ease;
+    }
+    .cursor svg { width: 100%; height: 100%; fill: #000; stroke: #fff; stroke-width: 1.4; stroke-linejoin: round; }
+    #film.aim .cursor { opacity: 1; transform: translate(612px, 286px); }
+    #film.aim.pressed .cursor { transform: translate(612px, 286px) scale(0.86); transition: transform 0.12s ease, opacity 0.3s ease; }
+    #film.aim.gone .cursor { opacity: 0; }
+
+    .room {
+      position: absolute;
+      left: 270px;
+      top: 150px;
+      z-index: 2;
+      width: 540px;
+      height: 340px;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #0b0d11;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 30px 80px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      transform: translateY(-60px) scale(0.9);
+      transform-origin: 50% 0;
+      transition: opacity 0.35s ease, transform 0.6s var(--ease);
+    }
+    #film.room-open .room { opacity: 1; transform: none; }
+
+    /* Window chrome, shared by both room illustrations */
+    .titlebar {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+    }
+    .titlebar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+    .titlebar i:nth-child(2) { background: #febc2e; }
+    .titlebar i:nth-child(3) { background: #28c840; }
+    .titlebar span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font: 600 12px/1 var(--text);
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .tile { position: absolute; overflow: hidden; border-radius: 12px; background: #16181d; }
+    .tile.speaking { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55); }
+    .chip {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 2;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font: 600 11px/1.2 var(--text);
+      letter-spacing: 0;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.5);
+    }
+    .dock { position: absolute; left: 0; right: 0; display: flex; justify-content: center; gap: 12px; }
+    .dock i {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .dock i .ic { width: 17px; height: 17px; }
+    .dock i.on { background: #5c9eff; }
+
+    /* A friend, backlit */
+    .person {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: radial-gradient(95% 78% at 50% -6%, var(--k1) 0%, var(--k2) 26%, var(--k3) 56%, #070302 100%);
+    }
+    .person svg {
+      position: absolute;
+      left: 50%;
+      bottom: -3%;
+      width: 80%;
+      transform: translateX(-50%);
+      fill: url(#figure-fill);
+      stroke: var(--rim);
+      stroke-width: 1.1;
+      filter: drop-shadow(0 -2px 8px var(--glow)) blur(0.4px);
+    }
+    .amber { --k1: #ffe4b5; --k2: #ffb65c; --k3: #b4541a; --rim: rgba(255, 216, 160, 0.6); --glow: rgba(255, 176, 96, 0.4); }
+    .blue  { --k1: #dce9ff; --k2: #72a6ff; --k3: #283d98; --rim: rgba(205, 222, 255, 0.6); --glow: rgba(120, 160, 255, 0.4); }
+    .teal  { --k1: #dcffe9; --k2: #72dca2; --k3: #1b6553; --rim: rgba(205, 255, 225, 0.55); --glow: rgba(110, 220, 160, 0.35); }
+
+    .sway svg { animation: sway 7s ease-in-out infinite; }
+    @keyframes sway {
+      0%, 100% { transform: translateX(-50%) rotate(0deg); }
+      50% { transform: translateX(-51.5%) translateY(-1.2%) rotate(-1.2deg); }
+    }
+
+    /* Eyehole glass */
+    .eyehole { position: relative; border-radius: 50%; overflow: hidden; }
+    .eyehole .person svg { width: 86%; bottom: 0; }
+    .vignette {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(circle, transparent 0 55%, rgba(0, 0, 0, 0.55) 85%, rgba(0, 0, 0, 0.95) 100%);
+      transition: opacity 0.7s ease;
+    }
+    .spec {
+      position: absolute;
+      left: 12%;
+      top: 13%;
+      width: 28%;
+      height: 10%;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.14);
+      transform: rotate(-32deg);
+      filter: blur(3px);
+      transition: opacity 0.7s ease;
+    }
+    .rim {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    }
+    .door-glass .eyehole { width: 100%; height: 100%; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); }
+
+    /* Intro */
+    .intro .h-hero { max-width: 820px; }
+    .intro .lede { max-width: 700px; margin-top: 28px; }
+
+    /* The knock */
+    .knock { overflow: hidden; }
+    .knock-head { margin-bottom: 88px; }
+    .lens-wrap { position: relative; display: flex; justify-content: center; }
+    .lens-wrap::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 900px;
+      height: 700px;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(closest-side, rgba(255, 150, 60, 0.14), transparent);
+      pointer-events: none;
+    }
+    .lens {
+      --d: min(440px, 76vw);
+      position: relative;
+      width: var(--d);
+      height: var(--d);
+      border-radius: calc(var(--d) / 2);
+      overflow: hidden;
+      box-shadow: 0 0 0 10px #0e0e10, 0 0 0 11px rgba(255, 255, 255, 0.12), 0 40px 120px rgba(0, 0, 0, 0.8);
+      transition:
+        width 0.7s var(--ease),
+        height 0.7s var(--ease),
+        border-radius 0.7s var(--ease),
+        box-shadow 0.7s ease;
+    }
+    .lens .person svg { width: calc(var(--d) * 0.86); bottom: -5%; }
+    .lens.rect {
+      width: min(720px, 88vw);
+      height: calc(min(720px, 88vw) * 9 / 16);
+      border-radius: 32px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 40px 120px rgba(0, 0, 0, 0.8);
+    }
+    .lens.rect .person svg { width: calc(var(--d) * 0.72); }
+    .lens.rect .vignette, .lens.rect .spec { opacity: 0; }
+    .lens-wrap .person svg { transition: width 0.7s var(--ease); }
+
+    .seg-wrap { margin-top: 56px; text-align: center; }
+    .seg { display: inline-flex; padding: 4px; border-radius: 980px; background: rgba(255, 255, 255, 0.1); }
+    .seg button {
+      padding: 8px 18px;
+      border-radius: 980px;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.8);
+      transition: background 0.3s, color 0.3s;
+    }
+    .seg button[aria-pressed="true"] { color: var(--graphite); background: #f5f5f7; }
+    .seg-caption { margin-top: 14px; font-size: 14px; color: var(--steel); }
+    .knock .cols { margin-top: 112px; }
+
+    /* Showcase stages on light sections */
+    .showcase {
+      margin-top: 72px;
+      padding: clamp(24px, 6vw, 80px);
+      border-radius: 28px;
+      background: var(--cloud);
+    }
+    .walk .cols, .room-sec .cols { margin-top: 72px; }
+    .walk .cols { grid-template-columns: repeat(2, 1fr); max-width: 820px; }
+
+    /* The building */
+    .board-frame { max-width: 640px; margin: 0 auto; aspect-ratio: 560 / 300; }
+    #board { width: 560px; height: 300px; border-radius: 28px; overflow: hidden; color: #fff; background: #000; }
+    .board-top {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 44px;
+      padding: 0 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font: 600 13px/1 var(--text);
+      letter-spacing: 0;
+    }
+    .board-top .home { display: flex; align-items: center; gap: 7px; }
+    .board-top .tools { display: flex; gap: 16px; color: rgba(255, 255, 255, 0.55); }
+    .board-top .ic { width: 15px; height: 15px; }
+    .friends { position: absolute; top: 92px; left: 0; right: 0; display: flex; justify-content: center; gap: 18px; }
+    .friend { position: relative; width: 104px; text-align: center; letter-spacing: 0; }
+    .friend b { display: block; margin-top: 12px; font: 600 13px/1.2 var(--text); }
+    .friend span { font: 400 11px/1.3 var(--text); color: rgba(255, 255, 255, 0.45); }
+    .peep {
+      position: relative;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font: 600 21px/1 var(--text);
+      color: rgba(255, 255, 255, 0.94);
+      background: linear-gradient(135deg, var(--c0), var(--c1));
+      box-shadow: 0 0 0 2.5px #000, 0 0 0 3.5px rgba(255, 255, 255, 0.16);
+    }
+    .peep::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.06) 38%, rgba(0, 0, 0, 0.06) 62%, rgba(0, 0, 0, 0.22));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -10px 18px rgba(0, 0, 0, 0.26);
+    }
+    .friend.close .peep { box-shadow: 0 0 0 2.5px #000, 0 0 0 4.5px var(--green); }
+    .bubble {
+      position: absolute;
+      top: -32px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      padding: 4px 9px;
+      border-radius: 10px;
+      font: 500 10.5px/1.2 var(--text);
+      color: rgba(255, 255, 255, 0.82);
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .board-foot {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font: 400 10.5px/1 var(--text);
+      letter-spacing: 0;
+      color: rgba(255, 255, 255, 0.28);
+    }
+    .board-foot .legend { display: flex; align-items: center; gap: 7px; color: rgba(255, 255, 255, 0.5); }
+    .board-foot .legend i { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--green); }
+
+    /* The room */
+    .room-frame { max-width: 880px; margin: 0 auto; aspect-ratio: 880 / 520; }
+    #roomwin {
+      width: 880px;
+      height: 520px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #0b0d11;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 24px 60px rgba(0, 0, 0, 0.18);
+    }
+    #roomwin .titlebar { height: 40px; padding: 0 16px; }
+    .doc {
+      position: absolute;
+      inset: 0;
+      padding: 26px 30px;
+      color: var(--graphite);
+      background: #fbfbfd;
+      letter-spacing: 0;
+    }
+    .doc small { font: 400 11px/1 var(--text); color: var(--steel); }
+    .doc h4 { margin: 6px 0 18px; font: 600 26px/1.1 var(--display); letter-spacing: -0.01em; }
+    .doc-body { display: flex; gap: 22px; }
+    .sunset {
+      position: relative;
+      flex: none;
+      width: 300px;
+      height: 196px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #ffcf8a 0%, #ff8a5c 38%, #e2537a 62%, #5b3fc4 100%);
+    }
+    .sunset::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 44%;
+      width: 64px;
+      height: 64px;
+      margin-left: -32px;
+      border-radius: 50%;
+      background: #fff1c9;
+      opacity: 0.9;
+    }
+    .sunset::after {
+      content: "";
+      position: absolute;
+      inset: 66% 0 0 0;
+      background: linear-gradient(180deg, #3b2c8f, #1c1a4d);
+    }
+    .todo { list-style: none; font: 400 13px/1.3 var(--text); }
+    .todo li { display: flex; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px solid #ececf0; }
+    .todo li::before {
+      content: "";
+      flex: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1.5px #c7c7cc;
+    }
+    .todo li.done::before { background: #34c759; box-shadow: none; }
+    .todo li.done { color: var(--steel); }
+    .pointer { position: absolute; left: 218px; top: 176px; z-index: 3; }
+    .pointer svg { width: 20px; height: 20px; fill: #5c9eff; stroke: #fff; stroke-width: 1.5; stroke-linejoin: round; }
+    .pointer span {
+      position: absolute;
+      left: 16px;
+      top: 18px;
+      padding: 3px 7px;
+      border-radius: 7px;
+      font: 600 11px/1.2 var(--text);
+      color: #fff;
+      background: #5c9eff;
+    }
+    .pointer::before {
+      content: "";
+      position: absolute;
+      left: -13px;
+      top: -13px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px #5c9eff;
+      opacity: 0;
+      animation: ping 2.6s ease-out infinite;
+    }
+    @keyframes ping {
+      0% { transform: scale(0.3); opacity: 0.9; }
+      45%, 100% { transform: scale(1.4); opacity: 0; }
+    }
+
+    /* Privacy */
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 72px; }
+    .card { padding: 40px; border-radius: 28px; background: var(--cloud); }
+    .card .ic { width: 36px; height: 36px; stroke-width: 1.5; margin-bottom: 44px; }
+    .card p { margin-top: 10px; color: var(--slate); }
+
+    /* Specs */
+    .specs { padding-top: 0; }
+    .specs .wrap > hr { border: 0; border-top: 1px solid var(--divider); margin-bottom: 96px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; margin-top: 64px; }
+    .stat b { display: block; white-space: nowrap; font: 600 clamp(32px, 3.6vw, 44px)/1.08 var(--display); letter-spacing: -0.003em; }
+    .stat p { margin-top: 10px; font-size: 14px; line-height: 1.43; letter-spacing: -0.016em; color: var(--slate); }
+
+    /* Get */
+    .get-icon { width: 128px; height: 128px; margin: 0 auto 28px; }
+    .get .lede { margin-top: 14px; }
+    .install {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      max-width: 640px;
+      margin: 44px auto 0;
+      padding: 8px 8px 8px 22px;
+      border-radius: 980px;
+      background: #1d1d1f;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+    .install code {
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+      text-align: left;
+      font: 400 14px/1.4 var(--mono);
+      letter-spacing: 0;
+      color: #f5f5f7;
+      scrollbar-width: none;
+    }
+    .install code::-webkit-scrollbar { display: none; }
+    .copy {
+      flex: none;
+      min-width: 76px;
+      padding: 9px 16px;
+      border-radius: 980px;
+      font-size: 14px;
+      color: #fff;
+      background: var(--blue);
+      transition: background 0.2s;
+    }
+    .copy:hover { background: #0077ed; }
+    .get .fine { max-width: 520px; margin: 18px auto 0; font-size: 14px; line-height: 1.43; }
+    .get-links { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; margin-top: 28px; }
+
+    /* Footer */
+    footer { padding: 20px 0 24px; background: var(--cloud); font-size: 12px; line-height: 1.33; letter-spacing: -0.01em; color: var(--slate); }
+    footer hr { border: 0; border-top: 1px solid var(--divider); margin: 16px 0 12px; }
+    .foot-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .foot-row .release { color: var(--steel); }
+
+    /* Scroll reveal */
+    .js .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.9s ease, transform 1.1s var(--ease); }
+    .js .reveal.in { opacity: 1; transform: none; }
+
+    @media (max-width: 1068px) {
+      :root { --section: 128px; }
+    }
+
+    @media (max-width: 734px) {
+      :root { --section: 96px; }
+      .nav-links a:not(.pill-sm) { display: none; }
+      .hero { padding-top: 48px; }
+      .hero-icon { width: 80px; height: 80px; }
+      .film { margin-top: 56px; }
+      .film-frame { border-radius: 14px; }
+      .cols, .walk .cols, .cards { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .card { padding: 32px; }
+      .knock-head { margin-bottom: 64px; }
+      .knock .cols { margin-top: 80px; }
+      .install { border-radius: 18px; flex-direction: column; align-items: stretch; padding: 16px; }
+      .install code { white-space: normal; word-break: break-all; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .js .reveal { opacity: 1; transform: none; transition: none; }
+      .sway svg, .pointer::before { animation: none; }
+      .film-ctl { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <script>document.documentElement.classList.add("js");</script>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="figure-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c0f08"/><stop offset="1" stop-color="#040202"/></linearGradient>
+      <symbol id="figure" viewBox="0 0 200 200"><path d="M100 28C80 28 68 42 68 62c0 12 2 22 6 30 3 9 8 16 13 20v10c-7 6-29 12-43 20-14 8-20 24-22 58h156c-2-34-8-50-22-58-14-8-36-14-43-20v-10c5-4 10-11 13-20 4-8 6-18 6-30 0-20-12-34-32-34z"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+      <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/></symbol>
+      <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M12 13.5V8.5M9.5 11L12 8.5l2.5 2.5M8 20.5h8"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5v-7A2.5 2.5 0 0 1 6.5 4z"/></symbol>
+      <symbol id="i-leave" viewBox="0 0 24 24"><path d="M10 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20H10M14.5 8l4 4-4 4M18.5 12H9.5"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></symbol>
+      <symbol id="i-building" viewBox="0 0 24 24"><path d="M3 20.5h18M5 20.5V5.5L12 3v17.5M12 8.5h7v12M8 8h1M8 11.5h1M8 15h1M15 12h1M15 15.5h1"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M4.5 10a10.5 10.5 0 0 1 15 0M7.3 13a6.5 6.5 0 0 1 9.4 0M10 16a2.8 2.8 0 0 1 4 0"/></symbol>
+      <symbol id="i-battery" viewBox="0 0 24 24"><rect x="2.5" y="7.5" width="17" height="9" rx="2.5"/><path d="M22 10.5v3M5 10h9v4H5z"/></symbol>
+      <symbol id="i-nodot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M4 4l16 16"/></symbol>
+      <symbol id="i-noeye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></symbol>
+      <symbol id="i-fade" viewBox="0 0 24 24"><path stroke-dasharray="2.2 2.6" d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4A2.5 2.5 0 0 1 4 13.5v-7A2.5 2.5 0 0 1 6.5 4z"/></symbol>
+      <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M5 3.5l13.5 9-6 1.2 3.4 6.6-2.4 1.2-3.4-6.6L5 19z"/></symbol>
+      <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14a4.5 4.5 0 0 0 7 0M9.2 9.5h.01M14.8 9.5h.01"/></symbol>
+    </defs>
+  </svg>
+
+  <nav class="nav" aria-label="Doorbell">
+    <div class="nav-inner">
+      <a class="nav-title" href="#top">Doorbell</a>
+      <div class="nav-links">
+        <a href="#knock">The knock</a>
+        <a href="#walk-in">Close friends</a>
+        <a href="#room">The room</a>
+        <a href="#privacy">Privacy</a>
+        <a class="pill-sm" href="#get">Get</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="top">
+    <section class="hero dark center">
+      <div class="wrap">
+        <img class="hero-icon" src="/doorbell-icon.png" width="104" height="104" alt="">
+        <p class="eyebrow">New</p>
+        <h1>Doorbell</h1>
+        <p class="h-cinema">Knock, knock.</p>
+        <p class="lede">Your Mac’s notch is now a door. Friends knock. You peek. Close friends walk right in.</p>
+        <div class="ctas">
+          <a class="pill" href="#get">Get Doorbell</a>
+          <a class="link" href="#knock">See how it works ›</a>
+        </div>
+        <p class="fine">For Mac with Apple silicon. macOS 15 or later.</p>
+      </div>
+
+      <div class="film wide">
+        <div class="fit film-frame" data-fit="1080">
+          <div class="stage" id="film" aria-hidden="true">
+            <div class="wallpaper"></div>
+            <div class="menubar">
+              <div class="left"><b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span></div>
+              <div class="right">
+                <svg class="ic"><use href="#i-battery"/></svg>
+                <svg class="ic"><use href="#i-wifi"/></svg>
+                <svg class="ic"><use href="#i-search"/></svg>
+                <span>Tue 29 Sep&nbsp;&nbsp;2:04 AM</span>
+              </div>
+            </div>
+
+            <div class="room">
+              <div class="titlebar"><i></i><i></i><i></i><span>Doorbell</span></div>
+              <div class="tile speaking" style="left:16px;top:38px;width:249px;height:238px">
+                <div class="person amber sway"><svg viewBox="0 0 200 200"><use href="#figure"/></svg></div>
+                <span class="chip">Priya</span>
+              </div>
+              <div class="tile" style="left:275px;top:38px;width:249px;height:238px">
+                <div class="person teal"><svg viewBox="0 0 200 200"><use href="#figure"/></svg></div>
+                <span class="chip">You</span>
+              </div>
+              <div class="dock" style="top:288px">
+                <i><svg class="ic"><use href="#i-mic"/></svg></i>
+                <i><svg class="ic"><use href="#i-video"/></svg></i>
+                <i><svg class="ic"><use href="#i-screen"/></svg></i>
+                <i><svg class="ic"><use href="#i-chat"/></svg></i>
+                <i><svg class="ic"><use href="#i-leave"/></svg></i>
+              </div>
+            </div>
+
+            <div class="shell">
+              <div class="door">
+                <div class="door-title">
+                  <div class="door-name">Priya</div>
+                  <div class="door-status">At your door</div>
+                </div>
+                <div class="door-glass">
+                  <div class="eyehole">
+                    <div class="person amber sway"><svg viewBox="0 0 200 200"><use href="#figure"/></svg></div>
+                    <div class="vignette"></div>
+                    <div class="spec"></div>
+                    <div class="rim"></div>
+                  </div>
+                </div>
+                <div class="doorstep"></div>
+                <div class="door-controls">
+                  <div class="ctl"><i><svg class="ic"><use href="#i-x"/></svg></i>Not Now</div>
+                  <div class="ctl"><i><svg class="ic"><use href="#i-speaker"/></svg></i>Listen</div>
+                  <div class="ctl accept"><i><svg class="ic"><use href="#i-check"/></svg></i>Accept</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cursor"><svg><use href="#i-pointer"/></svg></div>
+          </div>
+          <button class="film-ctl" id="film-ctl" type="button" aria-label="Pause animation">
+            <svg class="pause" viewBox="0 0 14 14"><rect x="3" y="2" width="2.6" height="10" rx="1"/><rect x="8.4" y="2" width="2.6" height="10" rx="1"/></svg>
+            <svg class="play" viewBox="0 0 14 14"><path d="M4 2.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L4.9 1.7a.6.6 0 0 0-.9.5z"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="intro">
+      <div class="wrap reveal">
+        <h2 class="h-hero">Video calls are appointments. Friendship never&nbsp;was.</h2>
+        <p class="lede">In a hostel, you walk down the corridor and knock. You barge in. Someone yells from the hallway. Nobody sends a calendar invite for maggi at 2&nbsp;a.m. <strong>Doorbell is that corridor, living in your Mac’s notch.</strong> No links. No scheduling. No meetings.</p>
+      </div>
+    </section>
+
+    <section class="knock dark" id="knock">
+      <div class="wrap center knock-head reveal">
+        <p class="kicker">The knock</p>
+        <h2 class="h-cinema">Someone’s at the door.</h2>
+      </div>
+
+      <div class="lens-wrap reveal">
+        <div class="lens" id="lens">
+          <div class="person amber sway"><svg viewBox="0 0 200 200"><use href="#figure"/></svg></div>
+          <div class="vignette"></div>
+          <div class="spec"></div>
+          <div class="rim"></div>
+        </div>
+      </div>
+      <div class="seg-wrap">
+        <div class="seg" role="group" aria-label="Glass">
+          <button type="button" data-glass="eye" aria-pressed="true">Eyehole</button>
+          <button type="button" data-glass="rect" aria-pressed="false">Rectangle</button>
+        </div>
+        <p class="seg-caption">Two kinds of glass. Same door.</p>
+      </div>
+
+      <div class="wrap">
+        <div class="cols reveal">
+          <p><strong>Click a friend. That’s the knock.</strong> Your camera and mic come on, and you’re standing at their door under the porch light.</p>
+          <p><strong>On their Mac, the notch becomes a peephole.</strong> Your face, small. Your voice, low, as if through the door. They can press Listen to turn you up.</p>
+          <p><strong>No ringtone. No red button.</strong> A soft two-note chime, then one green button to let you in. Or they leave the door shut. That’s an answer too.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="walk" id="walk-in">
+      <div class="wrap">
+        <div class="reveal">
+          <p class="kicker">Close friends</p>
+          <h2 class="h-hero">Close friends don’t knock.<br>They walk in.</h2>
+        </div>
+
+        <div class="showcase reveal">
+          <div class="fit board-frame" data-fit="560">
+            <div class="stage" id="board" aria-hidden="true">
+              <div class="board-top">
+                <span class="home"><svg class="ic"><use href="#i-building"/></svg>Doorbell</span>
+                <span class="tools"><svg class="ic"><use href="#i-search"/></svg><svg class="ic"><use href="#i-gear"/></svg></span>
+              </div>
+              <div class="friends">
+                <div class="friend close"><div class="peep" style="--c0:#8bdc9e;--c1:#338f80">P</div><b>Priya</b><span>@priya</span></div>
+                <div class="friend close"><div class="peep" style="--c0:#66a8ff;--c1:#4d5bdb">A</div><b>Arjun</b><span>@arjun</span></div>
+                <div class="friend"><div class="peep" style="--c0:#cc99fa;--c1:#7a4dcc">M</div><b>Meera</b><span>@meera</span></div>
+                <div class="friend"><em class="bubble">in a meeting till 4</em><div class="peep" style="--c0:#f5c266;--c1:#cc7533">K</div><b>Kabir</b><span>@kabir</span></div>
+              </div>
+              <div class="board-foot">
+                <span>by vagdev</span>
+                <span class="legend"><i></i>Friends knock. Close friends just get in.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cols reveal">
+          <p><strong>A short list. Four people, not forty.</strong> Close friends skip the knock and step straight into your room when you’re free. Already on a call? They wait at the door until you let them in.</p>
+          <p><strong>Yours to keep.</strong> The list stays private. Only people whose request you’ve accepted can knock at all. No links, no invite codes.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="room-sec gray" id="room">
+      <div class="wrap">
+        <div class="reveal">
+          <p class="kicker">The room</p>
+          <h2 class="h-hero">Come on in.</h2>
+          <p class="lede" style="max-width:700px;margin-top:20px">Open the door and you’re in the room: faces, voices, your screen if you want it, and a chat drawer for the link you can’t say out loud.</p>
+        </div>
+
+        <div class="fit room-frame reveal" data-fit="880" style="margin-top:72px">
+          <div class="stage" id="roomwin" aria-hidden="true">
+            <div class="titlebar"><i></i><i></i><i></i><span>Doorbell</span></div>
+            <div class="tile" style="left:16px;top:44px;width:600px;height:400px">
+              <div class="doc">
+                <small>Trip notes</small>
+                <h4>Goa, December</h4>
+                <div class="doc-body">
+                  <div class="sunset"></div>
+                  <ul class="todo">
+                    <li class="done">Flights, 19 Dec</li>
+                    <li class="done">Villa near Anjuna</li>
+                    <li>Who’s driving?</li>
+                    <li>Scooters or a car</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="pointer"><svg><use href="#i-pointer"/></svg><span>Arjun</span></div>
+              <span class="chip">Priya’s screen</span>
+            </div>
+            <div class="tile speaking" style="left:628px;top:44px;width:236px;height:194px">
+              <div class="person amber sway"><svg viewBox="0 0 200 200"><use href="#figure"/></svg></div>
+              <span class="chip">Priya</span>
+            </div>
+            <div class="tile" style="left:628px;top:250px;width:236px;height:194px">
+              <div class="person blue"><svg viewBox="0 0 200 200"><use href="#figure"/></svg></div>
+              <span class="chip">Arjun</span>
+            </div>
+            <div class="dock" style="top:462px">
+              <i><svg class="ic"><use href="#i-mic"/></svg></i>
+              <i><svg class="ic"><use href="#i-video"/></svg></i>
+              <i class="on"><svg class="ic"><use href="#i-screen"/></svg></i>
+              <i><svg class="ic"><use href="#i-chat"/></svg></i>
+              <i><svg class="ic"><use href="#i-leave"/></svg></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="cols reveal">
+          <div>
+            <svg class="ic"><use href="#i-screen"/></svg>
+            <h3>Screen share, with sound.</h3>
+            <p>Share a whole display or a single window. The apps you share bring their audio along.</p>
+          </div>
+          <div>
+            <svg class="ic"><use href="#i-pointer"/></svg>
+            <h3>Point at anything.</h3>
+            <p>Over a friend’s shared screen, your cursor becomes a named pointer in your colour. They see it on their real screen, too.</p>
+          </div>
+          <div>
+            <svg class="ic"><use href="#i-smile"/></svg>
+            <h3>Stickers.</h3>
+            <p>Animated emoji, or your own pictures, dropped straight into the chat.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="privacy" id="privacy">
+      <div class="wrap">
+        <div class="reveal">
+          <p class="kicker">Privacy</p>
+          <h2 class="h-hero">What happens at the door stays at the door.</h2>
+        </div>
+        <div class="cards">
+          <div class="card reveal">
+            <svg class="ic"><use href="#i-nodot"/></svg>
+            <h3 class="h-card">No green dots.</h3>
+            <p>No online status, no “active now,” no last seen. Nobody knows who’s home.</p>
+          </div>
+          <div class="card reveal">
+            <svg class="ic"><use href="#i-noeye"/></svg>
+            <h3 class="h-card">No read receipts.</h3>
+            <p>No seen. No delivered. No “peeked and didn’t answer.” Silence can always mean not there.</p>
+          </div>
+          <div class="card reveal">
+            <svg class="ic"><use href="#i-moon"/></svg>
+            <h3 class="h-card">Quiet Door.</h3>
+            <p>One switch in Settings. A knock shrinks to a pinhole — a tiny face in the notch, no sound, no bounce. They never know you were busy.</p>
+          </div>
+          <div class="card reveal">
+            <svg class="ic"><use href="#i-fade"/></svg>
+            <h3 class="h-card">Chat that doesn’t stick around.</h3>
+            <p>Messages live in the room. When you leave, they’re gone.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="specs">
+      <div class="wrap">
+        <hr>
+        <h2 class="h-section reveal">Made for the notch.</h2>
+        <div class="stats reveal">
+          <div class="stat"><b>0</b><p>green dots, read receipts, or “last seen.”</p></div>
+          <div class="stat"><b>5</b><p>people in a room, at most. Two to five friends is the whole idea.</p></div>
+          <div class="stat"><b>Native</b><p>Swift and SwiftUI. No Electron.</p></div>
+          <div class="stat"><b>macOS 15</b><p>or later, on Apple silicon. No notch? You get a pill under the menu bar.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="get dark center" id="get">
+      <div class="wrap reveal">
+        <img class="get-icon" src="/doorbell-icon.png" width="128" height="128" alt="Doorbell app icon">
+        <h2 class="h-hero">Answer the door.</h2>
+        <p class="lede">Doorbell for Mac. Apple silicon, macOS 15 or later.</p>
+        <div class="install">
+          <code>curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh</code>
+          <button type="button" class="copy" data-copy="curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh" aria-label="Copy install command">Copy</button>
+        </div>
+        <p class="fine">Paste it into Terminal. It downloads the latest release, checks the checksum and signature, and installs Doorbell in Applications.</p>
+        <div class="get-links">
+          <button type="button" class="link" id="agent-copy">Copy a prompt for your AI agent ›</button>
+          <button type="button" class="link" data-copy="curl -fsSL https://doorbellnotch.vercel.app/update.sh | zsh">Copy the update command ›</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Doorbell needs your camera and microphone to knock and answer, and Screen Recording to share your screen. The app checks for updates on its own, so you usually won’t need the update command.</p>
+      <hr>
+      <div class="foot-row">
+        <span class="release">Latest release <span id="release-tag">v2026.09.27-0234-7e2b5e8</span></span>
+        <span>Made by vagdev ;)</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const fits = [...document.querySelectorAll("[data-fit]")];
+    const fitStage = (frame) => {
+      frame.querySelector(".stage").style.transform = "scale(" + frame.clientWidth / Number(frame.dataset.fit) + ")";
+    };
+    const fitObserver = new ResizeObserver((entries) => entries.forEach((e) => fitStage(e.target)));
+    fits.forEach((f) => { fitStage(f); fitObserver.observe(f); });
+
+    // The hero film: idle notch, knock knock, the door, Accept, the room.
+    const film = document.getElementById("film");
+    const filmCtl = document.getElementById("film-ctl");
+    const beats = [
+      [700, () => { film.className = "stage"; }],
+      [900, () => film.classList.add("knock")],
+      [850, () => { film.classList.remove("knock"); film.classList.add("open"); }],
+      [1500, () => film.classList.add("aim")],
+      [1250, () => film.classList.add("pressed")],
+      [240, () => { film.classList.remove("open"); film.classList.add("room-open", "gone"); }],
+      [3600, () => film.classList.remove("room-open")],
+    ];
+    let beat = 0;
+    let timer = null;
+    let userPaused = false;
+    let onScreen = true;
+
+    function schedule() {
+      clearTimeout(timer);
+      if (userPaused || !onScreen) return;
+      timer = setTimeout(() => {
+        beats[beat][1]();
+        beat = (beat + 1) % beats.length;
+        schedule();
+      }, beats[beat][0]);
+    }
+
+    if (reduceMotion) {
+      film.classList.add("open");
+    } else {
+      new IntersectionObserver(([entry]) => {
+        onScreen = entry.isIntersecting;
+        schedule();
+      }).observe(film.parentElement);
+      filmCtl.addEventListener("click", () => {
+        userPaused = !userPaused;
+        filmCtl.classList.toggle("paused", userPaused);
+        filmCtl.setAttribute("aria-label", userPaused ? "Play animation" : "Pause animation");
+        schedule();
+      });
+      schedule();
+    }
+
+    const lens = document.getElementById("lens");
+    document.querySelectorAll("[data-glass]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        lens.classList.toggle("rect", btn.dataset.glass === "rect");
+        document.querySelectorAll("[data-glass]").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+      });
+    });
+
+    if (!reduceMotion) {
+      const revealer = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
+        });
+      }, { rootMargin: "0px 0px -8% 0px" });
+      document.querySelectorAll(".reveal").forEach((el) => revealer.observe(el));
+    }
+
+    fetch("https://api.github.com/repos/vagdotdev/doorbell/releases/latest")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((release) => {
+        if (release?.tag_name) {
+          document.getElementById("release-tag").textContent = release.tag_name;
+        }
+      })
+      .catch(() => { /* offline or rate-limited; keep baked tag */ });
+
+    const agentPrompt =
+      "Install the Doorbell app on this Mac. Run this command in the terminal:\n" +
+      "\n" +
+      "curl -fsSL https://doorbellnotch.vercel.app/install.sh | zsh\n" +
+      "\n" +
+      "This downloads Doorbell.dmg from GitHub, verifies its checksum and code signature, installs Doorbell.app to /Applications, and launches it. Requires macOS 15+ on Apple Silicon.\n" +
+      "\n" +
+      "If macOS blocks the app, open System Settings \u2192 Privacy & Security and click \u201cOpen Anyway\u201d, then rerun the command.\n" +
+      "\n" +
+      "After it finishes, confirm /Applications/Doorbell.app exists and the app is running. Make sure it works flawlessly.";
+    document.getElementById("agent-copy").dataset.copy = agentPrompt;
+
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    }
+
+    document.querySelectorAll("[data-copy]").forEach((btn) => {
+      const label = btn.textContent;
+      let reset;
+      btn.addEventListener("click", () => {
+        copyText(btn.dataset.copy);
+        btn.textContent = btn.classList.contains("copy") ? "Copied" : "Copied ✓";
+        clearTimeout(reset);
+        reset = setTimeout(() => { btn.textContent = label; }, 1600);
+      });
+    });
+  </script>
+</body>
+</html>
